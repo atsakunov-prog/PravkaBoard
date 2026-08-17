@@ -342,6 +342,12 @@
     <!-- Option to hide clipboard and emoji toolbars when main toolbar is hidden -->
     <string name="toolbar_hiding_global">Hide clipboard and emoji toolbars too</string>
     <!-- Title of the setting to set toolbar keys -->
+    <!-- PravkaBoard toolbar keys -->
+    <string name="pravka_clean">Pravka: fix the text</string>
+    <string name="pravka_voice">Pravka: dictate</string>
+    <string name="pravka_shorter">Pravka: shorter</string>
+    <string name="pravka_longer">Pravka: longer</string>
+    <string name="pravka_polish">Pravka: polish style</string>
     <string name="toolbar_keys">Select toolbar keys</string>
     <!-- Names of the toolbar keys-->
     <string name="paste" tools:keep="@string/paste" translatable="false">@android:string/paste</string>

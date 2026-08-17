@@ -95,6 +95,11 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     SPLIT -> KeyCode.SPLIT_LAYOUT
     FLOATING -> KeyCode.TOGGLE_FLOATING_WINDOW
     BACKGROUND_GATHERING -> KeyCode.BACKGROUND_GATHERING
+    PRAVKA_CLEAN -> KeyCode.PRAVKA_CLEAN
+    PRAVKA_VOICE -> KeyCode.PRAVKA_VOICE
+    PRAVKA_SHORTER -> KeyCode.PRAVKA_SHORTER
+    PRAVKA_LONGER -> KeyCode.PRAVKA_LONGER
+    PRAVKA_POLISH -> KeyCode.PRAVKA_POLISH
 }
 
 fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getCustomToolbarLongpressCode(key) ?: when (key) {
@@ -114,6 +119,8 @@ fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getC
     PAGE_UP -> KeyCode.MOVE_START_OF_PAGE
     PAGE_DOWN -> KeyCode.MOVE_END_OF_PAGE
     BACKGROUND_GATHERING -> KeyCode.BACKGROUND_GATHERING_TEMP_OFF
+    // Long press on the Pravka key stores the API key from the clipboard.
+    PRAVKA_CLEAN -> KeyCode.PRAVKA_SET_KEY
     else -> KeyCode.UNSPECIFIED
 }
 
@@ -121,7 +128,8 @@ fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getC
 enum class ToolbarKey {
     VOICE, CLIPBOARD, NUMPAD, DPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, FLOATING, SPLIT,
     INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
-    PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, BACKGROUND_GATHERING
+    PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, BACKGROUND_GATHERING,
+    PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH
 }
 
 enum class ToolbarMode {
@@ -131,7 +139,7 @@ enum class ToolbarMode {
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
 val defaultToolbarPref by lazy {
-    val default = listOf(SETTINGS, VOICE, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
+    val default = listOf(PRAVKA_VOICE, PRAVKA_CLEAN, SETTINGS, CLIPBOARD, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }
     default.joinToString(Separators.ENTRY) { it.name + Separators.KV + true } + Separators.ENTRY +
             others.joinToString(Separators.ENTRY) { it.name + Separators.KV + false }

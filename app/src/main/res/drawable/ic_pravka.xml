@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PravkaBoard: the wide Cyrillic "П" mark of the Pravka app. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:height="24dp"
+    android:width="24dp"
+    android:viewportHeight="24"
+    android:viewportWidth="24">
+    <path android:fillColor="#FFF"
+        android:pathData="M5,4h14v16h-3V7H8v13H5z"/>
+</vector>

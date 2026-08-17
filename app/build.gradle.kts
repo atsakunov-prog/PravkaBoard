@@ -134,6 +134,9 @@ dependencies {
     // kotlin
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
+    // PravkaBoard: Anthropic API client (SSE streaming)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     // compose
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     // newer than 2025.11.01 contains androidx.compose.material:material-android:1.10.0, which requires minSdk 23

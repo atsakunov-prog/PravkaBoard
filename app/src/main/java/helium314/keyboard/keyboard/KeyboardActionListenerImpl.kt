@@ -105,6 +105,11 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
 
     override fun onCodeInput(primaryCode: Int, x: Int, y: Int, isKeyRepeat: Boolean) {
         when (primaryCode) {
+            KeyCode.PRAVKA_CLEAN, KeyCode.PRAVKA_VOICE, KeyCode.PRAVKA_SHORTER,
+            KeyCode.PRAVKA_LONGER, KeyCode.PRAVKA_POLISH, KeyCode.PRAVKA_SET_KEY -> {
+                helium314.keyboard.pravka.Pravka.get(latinIME).onToolbarKey(primaryCode)
+                return
+            }
             KeyCode.TOGGLE_AUTOCORRECT -> return settings.toggleAutoCorrect()
             KeyCode.TOGGLE_INCOGNITO_MODE -> {
                 settings.toggleAlwaysIncognitoMode()

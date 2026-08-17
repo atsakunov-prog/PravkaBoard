@@ -13,6 +13,9 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WRITE_USER_DICTIONARY" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- PravkaBoard: Claude proofreading (network) and live dictation (mic) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application android:label="@string/english_ime_name"
             android:name="helium314.keyboard.latin.App"
@@ -26,6 +29,12 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
             android:localeConfig="@xml/locales_config"
             tools:remove="android:appComponentFactory"
             tools:targetApi="33">
+
+        <!-- PravkaBoard: invisible one-shot mic-permission request -->
+        <activity android:name="helium314.keyboard.pravka.MicPermissionActivity"
+                android:exported="false"
+                android:excludeFromRecents="true"
+                android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- Services -->
         <service android:name="LatinIME"

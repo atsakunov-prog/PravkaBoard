@@ -1015,6 +1015,7 @@ public class LatinIME extends InputMethodService implements
     public void onWindowHidden() {
         super.onWindowHidden();
         Log.i(TAG, "onWindowHidden");
+        helium314.keyboard.pravka.Pravka.onHideWindow();
         final MainKeyboardView mainKeyboardView = mKeyboardSwitcher.getMainKeyboardView();
         if (mainKeyboardView != null) {
             mainKeyboardView.closing();
