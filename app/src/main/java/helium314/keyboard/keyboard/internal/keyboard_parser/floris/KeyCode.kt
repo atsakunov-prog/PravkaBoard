@@ -193,7 +193,8 @@ object KeyCode {
     const val PRAVKA_POLISH =             -10064
     const val PRAVKA_SET_KEY =            -10065
     const val PRAVKA_SELECT =             -10066  // latch: arrows extend the selection
-    const val PRAVKA_NUMROW =             -10067  // show the number row for 5 seconds
+    const val PRAVKA_NUMROW =             -10067  // arm the number row for 5 seconds
+    const val PRAVKA_NUM_INERT =          -10068  // a disarmed digit: visible, does nothing
 
     // Valid in popups and for toolbar key long press only
     const val KEY_REPEAT =                -11000
@@ -223,6 +224,7 @@ object KeyCode {
         SEND_INTENT_THREE, EMOJI_SEARCH, INLINE_EMOJI_SEARCH_DONE, META_LOCK,
         BACKGROUND_GATHERING, BACKGROUND_GATHERING_TEMP_OFF, DPAD,
         PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH, PRAVKA_SET_KEY, PRAVKA_SELECT, PRAVKA_NUMROW,
+        PRAVKA_NUM_INERT,
         -> this
 
         KEY_REPEAT if (longPress) -> this

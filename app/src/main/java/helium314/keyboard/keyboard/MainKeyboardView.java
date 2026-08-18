@@ -822,6 +822,8 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         }
         else
             spaceText = layoutLanguageOnSpacebar(paint, keyboard.mId.getSubtype(), width);
+        // PravkaBoard: chevrons show that a horizontal swipe switches the language.
+        final String decoratedSpaceText = spaceText.isEmpty() ? spaceText : "\u2039 " + spaceText + " \u203a";
         paint.setTypeface(KeyboardTypeface.resolve(spaceText, Typeface.DEFAULT));
         // Draw language text with shadow
         final float descent = paint.descent();
@@ -835,11 +837,11 @@ public final class MainKeyboardView extends KeyboardView implements DrawingProxy
         }
         paint.setColor(mLanguageOnSpacebarTextColor);
         paint.setAlpha(mLanguageOnSpacebarAnimAlpha);
-        if (!fitsTextIntoWidth(width, spaceText, paint)) {
-            final float textWidth = TypefaceUtils.getStringWidth(spaceText, paint);
+        if (!fitsTextIntoWidth(width, decoratedSpaceText, paint)) {
+            final float textWidth = TypefaceUtils.getStringWidth(decoratedSpaceText, paint);
             paint.setTextScaleX((width - mLanguageOnSpacebarHorizontalMargin * 2) / textWidth);
         }
-        canvas.drawText(spaceText, width / 2f, baseline - descent, paint);
+        canvas.drawText(decoratedSpaceText, width / 2f, baseline - descent, paint);
         paint.clearShadowLayer();
         paint.setTextScaleX(1.0f);
     }

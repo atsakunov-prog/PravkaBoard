@@ -10,7 +10,6 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.widget.Toast
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import helium314.keyboard.latin.LatinIME
-import helium314.keyboard.latin.utils.prefs
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,14 +36,38 @@ class Pravka(private val ime: LatinIME) {
         /** Input view is being hidden/torn down - stop the take, drop the overlay. */
         @JvmStatic
         fun onHideWindow() {
+            // Our own re-render (setThemeNeedsReload hides+shows the IME) must
+            // not wipe the very state it is repainting.
+            if (internalReload) return
             instance?.onHide()
-            selectionLatch = false
+            if (selectionLatch) {
+                selectionLatch = false
+                helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().markThemeNeedsReload()
+            }
+            instance?.disarmNumbersQuietly()
         }
 
-        /** While true, arrow keys extend the selection (shift+arrow key events). */
+        /** While true, arrow keys extend the selection (direct setSelection). */
         @JvmStatic
         var selectionLatch = false
             private set
+
+        /** While true, the always-visible number row actually types digits. */
+        @JvmStatic
+        var numbersArmed = false
+            private set
+
+        private var internalReload = false
+    }
+
+    /** Rebuild the keyboard so key state (latch color, digit dimming) repaints. */
+    private fun reloadKeyboard() {
+        internalReload = true
+        try {
+            helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().setThemeNeedsReload()
+        } finally {
+            internalReload = false
+        }
     }
 
     private val crashLogger = CoroutineExceptionHandler { _, e ->
@@ -86,9 +109,9 @@ class Pravka(private val ime: LatinIME) {
             KeyCode.PRAVKA_SELECT -> {
                 selectionLatch = !selectionLatch
                 selAnchor = -1
-                toast(if (selectionLatch) "Выделение стрелками: ВКЛ" else "Выделение стрелками: выкл")
+                reloadKeyboard()  // the latch key repaints as pressed/released
             }
-            KeyCode.PRAVKA_NUMROW -> showNumberRowFor5s()
+            KeyCode.PRAVKA_NUMROW -> toggleNumbersArmed()
             else -> return false
         }
         return true
@@ -141,26 +164,38 @@ class Pravka(private val ime: LatinIME) {
         }
     }
 
-    // ---- 5-second number row (the "123" key in the nav row) ----
+    // ---- number row arming: digits are always visible but inert until the
+    // "123" key arms them; each digit press restarts the 5-second window ----
 
-    private var numRowTimer: Runnable? = null
-
-    private fun showNumberRowFor5s() {
-        val prefs = ime.prefs()
-        prefs.edit().putBoolean(
-            helium314.keyboard.latin.settings.Settings.PREF_SHOW_NUMBER_ROW, true
-        ).apply()
-        helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().setThemeNeedsReload()
-        val handler = android.os.Handler(android.os.Looper.getMainLooper())
-        numRowTimer?.let { handler.removeCallbacks(it) }
-        val off = Runnable {
-            prefs.edit().putBoolean(
-                helium314.keyboard.latin.settings.Settings.PREF_SHOW_NUMBER_ROW, false
-            ).apply()
-            helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().setThemeNeedsReload()
+    private val numHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val numDisarm = Runnable {
+        if (numbersArmed) {
+            numbersArmed = false
+            reloadKeyboard()
         }
-        numRowTimer = off
-        handler.postDelayed(off, 5000)
+    }
+
+    private fun toggleNumbersArmed() {
+        numHandler.removeCallbacks(numDisarm)
+        numbersArmed = !numbersArmed
+        if (numbersArmed) numHandler.postDelayed(numDisarm, 5000)
+        reloadKeyboard()
+    }
+
+    /** A digit was typed: the 5-second disarm window restarts. */
+    fun touchNumberTimer() {
+        if (!numbersArmed) return
+        numHandler.removeCallbacks(numDisarm)
+        numHandler.postDelayed(numDisarm, 5000)
+    }
+
+    /** Real window hide: drop the armed state without a hide/show cycle. */
+    fun disarmNumbersQuietly() {
+        if (!numbersArmed) return
+        numHandler.removeCallbacks(numDisarm)
+        numbersArmed = false
+        // Flag only - the layout rebuilds right before the IME is next shown.
+        helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().markThemeNeedsReload()
     }
 
     // ---- API key: copy the key, long-press the Pravka toolbar key ----
@@ -186,13 +221,19 @@ class Pravka(private val ime: LatinIME) {
         return extracted?.text?.toString().orEmpty()
     }
 
+    /** The current selection, or null - selected text takes priority everywhere. */
+    private fun selectedText(): String? = runCatching {
+        ime.currentInputConnection?.getSelectedText(0)?.toString()
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+
     private fun clipboardText(): String = runCatching {
         val cm = ime.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
     }.getOrDefault("")
 
-    /** Field text if any, else the clipboard - what assist actions work on. */
+    /** Selection > field > clipboard - what assist actions work on. */
     private fun assistSource(): Pair<String, String>? {
+        selectedText()?.let { return it to "выделение" }
         fieldText().takeIf { it.isNotBlank() }?.let { return it to "поле" }
         clipboardText().takeIf { it.isNotBlank() }?.let { return it to "буфер" }
         return null
@@ -203,9 +244,14 @@ class Pravka(private val ime: LatinIME) {
         if (busy) { toast("Уже работаю…"); return }
         if (session != null) { stopDictation(); return }
         if (overlay.isShowing) { overlay.hide(); return }  // second tap closes
-        val text = fieldText()
-        val preview = if (text.isBlank()) "Поле пустое. Диктовка и действия с буфером доступны."
-            else text.takeLast(600)
+        val sel = selectedText()
+        val text = sel ?: fieldText()
+        // The panel scrolls, so show plenty - but not an unbounded field.
+        val preview = when {
+            text.isBlank() -> "Поле пустое. Диктовка и действия с буфером доступны."
+            sel != null -> "— выделенный фрагмент —\n" + text.take(4000)
+            else -> text.takeLast(4000)
+        }
         overlay.show(
             preview,
             listOf(
@@ -274,11 +320,21 @@ class Pravka(private val ime: LatinIME) {
         }
     }
 
+    // Whole-field fixes are capped: past this, ask for a selection instead of
+    // silently truncating (a truncated rewrite would eat the rest of the field).
+    private val maxFixLen = 15000
+
     private fun cleanField(directive: String, strong: Boolean) {
         if (busy) { toast("Уже работаю…"); return }
         if (session != null) { stopDictation(); return }
-        val text = fieldText()
+        // A selection narrows the fix to just that fragment.
+        val sel = selectedText()
+        val text = sel ?: fieldText()
         if (text.isBlank()) { toast("Поле пустое — нечего править."); return }
+        if (text.length > maxFixLen) {
+            toast("Текст слишком длинный (${text.length} зн.). Выдели фрагмент — Правка обработает только его.")
+            return
+        }
         val key = apiKey()
         if (key.isBlank()) { toast("Нет API-ключа: Настройки клавиатуры → Правка."); return }
 
@@ -305,13 +361,24 @@ class Pravka(private val ime: LatinIME) {
                 if (!changed) {
                     toast("Без изменений")
                 } else {
-                    replaceWholeField(cleaned)
+                    if (sel != null) replaceSelection(cleaned) else replaceWholeField(cleaned)
                     copyToClipboard(cleaned)
                 }
             }.onFailure { e ->
                 PravkaStore.appendHistory(ime, "keyboard", null, text, "", false, e.message)
                 toast(e.message ?: "Ошибка Правки")
             }
+        }
+    }
+
+    /** commitText replaces whatever is currently selected in the editor. */
+    private fun replaceSelection(newText: String) {
+        val ic = ime.currentInputConnection ?: return
+        runCatching {
+            ic.beginBatchEdit()
+            ic.finishComposingText()
+            ic.commitText(newText, 1)
+            ic.endBatchEdit()
         }
     }
 
@@ -364,12 +431,14 @@ class Pravka(private val ime: LatinIME) {
         val s = GoogleSpeechSession(ime, biasing = PravkaStore.biasingWords(ime))
         session = s
         pendingDirective = ""
+        discardTake = false
         overlay.show(
             "Говори…",
             listOf(
                 PravkaOverlay.Button("Причесать") { pendingDirective = PravkaPrompts.REDO_POLISH; stopDictation() },
                 PravkaOverlay.Button("■  Закончить", big = true) { stopDictation() },
                 PravkaOverlay.Button("Короче") { pendingDirective = PravkaPrompts.REDO_SHORTER; stopDictation() },
+                PravkaOverlay.Button("✕ Отмена") { discardTake = true; stopDictation() },
             ),
         )
         s.start(
@@ -388,8 +457,17 @@ class Pravka(private val ime: LatinIME) {
         session?.stop()
     }
 
+    // "✕ Отмена" on the dictation panel: throw the take away entirely.
+    private var discardTake = false
+
     private fun onDictationDone(rawText: String) {
         session = null
+        if (discardTake) {
+            discardTake = false
+            overlay.hide()
+            toast("Отменено")
+            return
+        }
         overlay.setButtons(emptyList())
         val text = VoiceCommands.apply(rawText)
         if (text.isBlank()) {

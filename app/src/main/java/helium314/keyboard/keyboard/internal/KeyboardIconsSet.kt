@@ -163,7 +163,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.PRAVKA_SHORTER -> R.drawable.ic_pravka_shorter
                     ToolbarKey.PRAVKA_LONGER -> R.drawable.ic_pravka_longer
                     ToolbarKey.PRAVKA_POLISH -> R.drawable.ic_pravka_polish
-                    ToolbarKey.PRAVKA_SELECT -> R.drawable.ic_select
+                    ToolbarKey.PRAVKA_SELECT -> R.drawable.ic_arrow_horizontal
                 })
             }
         } }
@@ -234,7 +234,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.PRAVKA_SHORTER -> R.drawable.ic_pravka_shorter
                     ToolbarKey.PRAVKA_LONGER -> R.drawable.ic_pravka_longer
                     ToolbarKey.PRAVKA_POLISH -> R.drawable.ic_pravka_polish
-                    ToolbarKey.PRAVKA_SELECT -> R.drawable.ic_select
+                    ToolbarKey.PRAVKA_SELECT -> R.drawable.ic_arrow_horizontal
                 })
             }
         } }
@@ -305,7 +305,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.PRAVKA_SHORTER -> R.drawable.ic_pravka_shorter
                     ToolbarKey.PRAVKA_LONGER -> R.drawable.ic_pravka_longer
                     ToolbarKey.PRAVKA_POLISH -> R.drawable.ic_pravka_polish
-                    ToolbarKey.PRAVKA_SELECT -> R.drawable.ic_select
+                    ToolbarKey.PRAVKA_SELECT -> R.drawable.ic_arrow_horizontal_rounded
                 })
             }
         } }

@@ -104,6 +104,11 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     }
 
     override fun onCodeInput(primaryCode: Int, x: Int, y: Int, isKeyRepeat: Boolean) {
+        // A disarmed number row digit: visible but does nothing.
+        if (primaryCode == KeyCode.PRAVKA_NUM_INERT) return
+        // Each typed digit restarts the number row's 5-second arming window.
+        if (primaryCode in 0x30..0x39 && helium314.keyboard.pravka.Pravka.numbersArmed)
+            helium314.keyboard.pravka.Pravka.get(latinIME).touchNumberTimer()
         when (primaryCode) {
             KeyCode.PRAVKA_CLEAN, KeyCode.PRAVKA_VOICE, KeyCode.PRAVKA_SHORTER,
             KeyCode.PRAVKA_LONGER, KeyCode.PRAVKA_POLISH, KeyCode.PRAVKA_SET_KEY,

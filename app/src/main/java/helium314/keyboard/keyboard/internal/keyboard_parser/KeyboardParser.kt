@@ -66,11 +66,15 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         // the number row), identical in folded and unfolded states:
         // select-all + selection latch | arrows | copy, paste (owner's request).
         if (params.mId.element.isAlphaOrSymbol) {
-            val labels = listOf("pravka_numrow", "select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
+            val labels = listOf("select_all", "select_word", "pravka_select", "left", "up", "down", "right", "copy", "paste")
             val navRow = ArrayList<KeyParams>()
             labels.forEach { label ->
+                // The selection latch renders with the accent (action) background
+                // while it is engaged, so its state is visible on the key.
+                val type = if (label == "pravka_select" && helium314.keyboard.pravka.Pravka.selectionLatch)
+                    KeyType.ENTER_EDITING else KeyType.FUNCTION
                 navRow.add(
-                    TextKeyData(label = label, width = 1f / labels.size, type = KeyType.FUNCTION)
+                    TextKeyData(label = label, width = 1f / labels.size, type = type)
                         .toKeyParams(params, defaultLabelFlags)
                 )
             }
@@ -121,7 +125,29 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         if (element.isAlphaOrSymbol && params.mId.numberRowEnabled) {
             val newLabelFlags = defaultLabelFlags or
                     if (Settings.getValues().mShowNumberRowHints) 0 else Key.LABEL_FLAGS_DISABLE_HINT_LABEL
-            baseKeys.add(0, numberRow.mapTo(mutableListOf()) { it.copy(newLabelFlags = newLabelFlags) })
+            // PravkaBoard: the digits are always visible but INERT until the arm
+            // key left of "1" is pressed (accidental digits kept breaking
+            // autocorrect); each typed digit restarts the 5-second window.
+            // Disarmed digits carry PRAVKA_NUM_INERT (swallowed by the listener)
+            // and the functional background, so the row reads as switched off.
+            val armed = helium314.keyboard.pravka.Pravka.numbersArmed
+            val row = numberRow.mapTo(mutableListOf<KeyData>()) {
+                if (armed) it.copy(newLabelFlags = newLabelFlags)
+                else it.copy(
+                    newType = KeyType.FUNCTION,
+                    newCode = KeyCode.PRAVKA_NUM_INERT,
+                    newLabelFlags = newLabelFlags,
+                )
+            }
+            row.add(
+                0,
+                TextKeyData(
+                    label = "pravka_numrow",
+                    width = 0.09f,
+                    type = if (armed) KeyType.ENTER_EDITING else KeyType.FUNCTION,
+                )
+            )
+            baseKeys.add(0, row)
         }
         if (!params.mAllowRedundantPopupKeys)
             params.baseKeys = baseKeys.flatMap { row -> row.map { it.toKeyParams(params) } }
