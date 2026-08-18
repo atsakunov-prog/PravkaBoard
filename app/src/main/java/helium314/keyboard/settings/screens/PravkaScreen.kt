@@ -59,6 +59,8 @@ fun PravkaScreen(
     onClickBack: () -> Unit,
     onClickHistory: () -> Unit = {},
     onClickDictionary: () -> Unit = {},
+    onClickPrompts: () -> Unit = {},
+    onClickStats: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val prefs = remember { ctx.getSharedPreferences("pravka", Context.MODE_PRIVATE) }
@@ -107,10 +109,16 @@ fun PravkaScreen(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = onClickHistory) { Text("Расшифровки") }
-                    val dictCount = remember { PravkaStore.dictionary(ctx).size }
-                    Button(onClick = onClickDictionary) { Text("Словарь ($dictCount)") }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = onClickHistory) { Text("Расшифровки") }
+                        val dictCount = remember { PravkaStore.dictionary(ctx).size }
+                        Button(onClick = onClickDictionary) { Text("Словарь ($dictCount)") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = onClickPrompts) { Text("Промпты") }
+                        Button(onClick = onClickStats) { Text("Статистика") }
+                    }
                 }
 
                 // Accessibility service status (the floating button)

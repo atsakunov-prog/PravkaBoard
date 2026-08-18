@@ -84,6 +84,9 @@ class Pravka(private val ime: LatinIME) {
     // on top of the CLEAN pass for the take that is being stopped.
     private var pendingDirective: String = ""
 
+    /** Effective (possibly user-edited) prompt text for [id]. */
+    private fun redo(id: PravkaPromptStore.PromptId) = PravkaPromptStore.effective(ime, id)
+
     private fun prefs() = ime.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun apiKey(): String = prefs().getString(KEY_API, "").orEmpty()
 
@@ -99,9 +102,9 @@ class Pravka(private val ime: LatinIME) {
         when (code) {
             KeyCode.PRAVKA_CLEAN ->
                 if (fromToolbar) showFixHub() else cleanField(directive = "", strong = false)
-            KeyCode.PRAVKA_SHORTER -> cleanField(PravkaPrompts.REDO_SHORTER, strong = true)
-            KeyCode.PRAVKA_LONGER -> cleanField(PravkaPrompts.REDO_LONGER, strong = true)
-            KeyCode.PRAVKA_POLISH -> cleanField(PravkaPrompts.REDO_POLISH, strong = true)
+            KeyCode.PRAVKA_SHORTER -> cleanField(redo(PravkaPromptStore.PromptId.REDO_SHORTER), strong = true)
+            KeyCode.PRAVKA_LONGER -> cleanField(redo(PravkaPromptStore.PromptId.REDO_LONGER), strong = true)
+            KeyCode.PRAVKA_POLISH -> cleanField(redo(PravkaPromptStore.PromptId.REDO_POLISH), strong = true)
             KeyCode.PRAVKA_VOICE ->
                 if (fromToolbar && session == null && !busy) showDictationLobby()
                 else toggleDictation()
@@ -276,18 +279,18 @@ class Pravka(private val ime: LatinIME) {
             preview,
             listOf(
                 PravkaOverlay.Button("Почистить", big = true) { cleanField("", strong = false) },
-                PravkaOverlay.Button("Причесать") { cleanField(PravkaPrompts.REDO_POLISH, strong = true) },
-                PravkaOverlay.Button("Короче") { cleanField(PravkaPrompts.REDO_SHORTER, strong = true) },
-                PravkaOverlay.Button("Длиннее") { cleanField(PravkaPrompts.REDO_LONGER, strong = true) },
+                PravkaOverlay.Button("Причесать") { cleanField(redo(PravkaPromptStore.PromptId.REDO_POLISH), strong = true) },
+                PravkaOverlay.Button("Короче") { cleanField(redo(PravkaPromptStore.PromptId.REDO_SHORTER), strong = true) },
+                PravkaOverlay.Button("Длиннее") { cleanField(redo(PravkaPromptStore.PromptId.REDO_LONGER), strong = true) },
                 PravkaOverlay.Button("Диктовка") { overlay.hide(); toggleDictation() },
                 PravkaOverlay.Button("Отменить") {
                     overlay.hide()
                     ime.onCodeInput(KeyCode.UNDO, helium314.keyboard.latin.common.Constants.SUGGESTION_STRIP_COORDINATE,
                         helium314.keyboard.latin.common.Constants.SUGGESTION_STRIP_COORDINATE, false)
                 },
-                PravkaOverlay.Button("Коротко") { runAssist(PravkaPrompts.ASSIST_SUMMARY, insertResult = false) },
-                PravkaOverlay.Button("Ответить") { runAssist(PravkaPrompts.ASSIST_REPLY, insertResult = false) },
-                PravkaOverlay.Button("Перевод") { runAssist(PravkaPrompts.ASSIST_TRANSLATE, insertResult = false) },
+                PravkaOverlay.Button("Коротко") { runAssist(redo(PravkaPromptStore.PromptId.ASSIST_SUMMARY), insertResult = false) },
+                PravkaOverlay.Button("Ответить") { runAssist(redo(PravkaPromptStore.PromptId.ASSIST_REPLY), insertResult = false) },
+                PravkaOverlay.Button("Перевод") { runAssist(redo(PravkaPromptStore.PromptId.ASSIST_TRANSLATE), insertResult = false) },
                 PravkaOverlay.Button("История") {
                     openSettings(helium314.keyboard.settings.SettingsDestination.PravkaHistory)
                 },
@@ -373,6 +376,7 @@ class Pravka(private val ime: LatinIME) {
                     model = if (strong) PravkaApi.MODEL_OPUS else PravkaApi.MODEL_SONNET,
                     onDelta = { partial -> scope.launch { overlay.update(partial.takeLast(1200)) } },
                     dictBlock = prepared.dictBlock,
+                    cleanTemplate = redo(PravkaPromptStore.PromptId.CLEAN),
                 )
             }
             busy = false
@@ -458,9 +462,9 @@ class Pravka(private val ime: LatinIME) {
         overlay.show(
             "Говори…",
             listOf(
-                PravkaOverlay.Button("Причесать") { pendingDirective = PravkaPrompts.REDO_POLISH; stopDictation() },
+                PravkaOverlay.Button("Причесать") { pendingDirective = redo(PravkaPromptStore.PromptId.REDO_POLISH); stopDictation() },
                 PravkaOverlay.Button("■  Закончить", big = true) { stopDictation() },
-                PravkaOverlay.Button("Короче") { pendingDirective = PravkaPrompts.REDO_SHORTER; stopDictation() },
+                PravkaOverlay.Button("Короче") { pendingDirective = redo(PravkaPromptStore.PromptId.REDO_SHORTER); stopDictation() },
                 PravkaOverlay.Button("✕ Отмена") { discardTake = true; stopDictation() },
             ),
         )
@@ -525,6 +529,7 @@ class Pravka(private val ime: LatinIME) {
                     model = if (directive.isBlank()) PravkaApi.MODEL_SONNET else PravkaApi.MODEL_OPUS,
                     onDelta = { partial -> scope.launch { overlay.update(partial.takeLast(1200)) } },
                     dictBlock = prepared.dictBlock,
+                    cleanTemplate = redo(PravkaPromptStore.PromptId.CLEAN),
                 )
             }
             busy = false

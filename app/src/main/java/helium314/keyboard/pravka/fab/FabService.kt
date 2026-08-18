@@ -462,6 +462,8 @@ class FabService : AccessibilityService() {
                         apiKey = key, input = prepared.text, contextBefore = contextBefore,
                         onDelta = { partial -> scope.launch { updateTicker(partial) } },
                         dictBlock = prepared.dictBlock,
+                        cleanTemplate = helium314.keyboard.pravka.PravkaPromptStore.effective(
+                            this@FabService, helium314.keyboard.pravka.PravkaPromptStore.PromptId.CLEAN),
                     )
                 }.onSuccess { fix ->
                     helium314.keyboard.pravka.PravkaStore.appendHistory(
@@ -516,6 +518,8 @@ class FabService : AccessibilityService() {
                     apiKey = key, input = prepared.text,
                     onDelta = { partial -> scope.launch { updateTicker(partial) } },
                     dictBlock = prepared.dictBlock,
+                    cleanTemplate = helium314.keyboard.pravka.PravkaPromptStore.effective(
+                        this@FabService, helium314.keyboard.pravka.PravkaPromptStore.PromptId.CLEAN),
                 ).map { fix ->
                     helium314.keyboard.pravka.PravkaStore.appendHistory(
                         this@FabService, "fab", fix, text, fix.text, fix.text.trim() != text.trim(), null)

@@ -29,7 +29,9 @@ import helium314.keyboard.settings.screens.PersonalDictionariesScreen
 import helium314.keyboard.settings.screens.PersonalDictionaryScreen
 import helium314.keyboard.settings.screens.PravkaDictionaryScreen
 import helium314.keyboard.settings.screens.PravkaHistoryScreen
+import helium314.keyboard.settings.screens.PravkaPromptsScreen
 import helium314.keyboard.settings.screens.PravkaScreen
+import helium314.keyboard.settings.screens.PravkaStatsScreen
 import helium314.keyboard.settings.screens.PreferencesScreen
 import helium314.keyboard.settings.screens.SecondaryLayoutScreen
 import helium314.keyboard.settings.screens.SubtypeScreen
@@ -90,6 +92,8 @@ fun SettingsNavHost(
                 onClickBack = ::goBack,
                 onClickHistory = { navController.navigate(SettingsDestination.PravkaHistory) },
                 onClickDictionary = { navController.navigate(SettingsDestination.PravkaDictionary) },
+                onClickPrompts = { navController.navigate(SettingsDestination.PravkaPrompts) },
+                onClickStats = { navController.navigate(SettingsDestination.PravkaStats) },
             )
         }
         composable(SettingsDestination.PravkaHistory) {
@@ -97,6 +101,12 @@ fun SettingsNavHost(
         }
         composable(SettingsDestination.PravkaDictionary) {
             PravkaDictionaryScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.PravkaPrompts) {
+            PravkaPromptsScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.PravkaStats) {
+            PravkaStatsScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.About) {
             AboutScreen(onClickBack = ::goBack)
@@ -167,6 +177,8 @@ object SettingsDestination {
     const val Pravka = "pravka"
     const val PravkaHistory = "pravka_history"
     const val PravkaDictionary = "pravka_dictionary"
+    const val PravkaPrompts = "pravka_prompts"
+    const val PravkaStats = "pravka_stats"
     const val TextCorrection = "text_correction"
     const val Preferences = "preferences"
     const val Toolbar = "toolbar"

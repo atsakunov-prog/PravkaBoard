@@ -194,6 +194,53 @@ object PravkaStore {
         return words.toList()
     }
 
+    // ---- export / share ----
+
+    /** The Pravka app's export format (root object with "entries"). */
+    fun exportDictionaryJson(context: Context): String {
+        val array = JSONArray()
+        dictionary(context).forEach { e ->
+            array.put(
+                JSONObject().apply {
+                    put("id", e.id)
+                    put("from", e.from)
+                    put("to", e.to)
+                    put("mode", e.mode.name)
+                    put("note", e.note)
+                    put("enabled", e.enabled)
+                    put("hits", e.hits)
+                }
+            )
+        }
+        return JSONObject().put("entries", array).toString(2)
+    }
+
+    fun historyRawText(context: Context): String =
+        runCatching { historyFile(context).takeIf { it.exists() }?.readText() }.getOrNull().orEmpty()
+
+    fun eventsRawText(context: Context): String =
+        runCatching { eventsFile(context).takeIf { it.exists() }?.readText() }.getOrNull().orEmpty()
+
+    /** Writes [content] into the export cache and opens the system share sheet. */
+    fun shareTextFile(context: Context, fileName: String, mime: String, content: String): Boolean =
+        runCatching {
+            val dir = File(context.cacheDir, "pravka_export").apply { mkdirs() }
+            val f = File(dir, fileName)
+            f.writeText(content)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, context.packageName + ".pravka.files", f,
+            )
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = mime
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                android.content.Intent.createChooser(intent, fileName)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.isSuccess
+
     // ---- migration from the standalone Pravka app ----
 
     /**
