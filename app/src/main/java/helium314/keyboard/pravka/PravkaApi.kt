@@ -21,6 +21,26 @@ object PravkaApi {
 
     class ApiException(message: String, val retryable: Boolean = false) : Exception(message)
 
+    /** A finished fix plus its cost accounting (journaled to the history). */
+    data class FixResult(
+        val text: String,
+        val model: String,
+        val latencyMs: Long,
+        val inputTokens: Int,
+        val cacheWriteTokens: Int,
+        val cacheReadTokens: Int,
+        val outputTokens: Int,
+    ) {
+        val costUsd: Double get() {
+            val (pIn, pOut) = when (model) {
+                MODEL_OPUS -> 5.0 to 25.0
+                else -> 3.0 to 15.0
+            }
+            return (inputTokens + 2.0 * cacheWriteTokens + 0.1 * cacheReadTokens) / 1_000_000.0 * pIn +
+                outputTokens / 1_000_000.0 * pOut
+        }
+    }
+
     private val client by lazy {
         OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
@@ -39,10 +59,23 @@ object PravkaApi {
         contextBefore: String = "",
         model: String = MODEL_SONNET,
         onDelta: ((String) -> Unit)? = null,
-    ): Result<String> = runCatching {
+        dictBlock: String = "",
+    ): Result<String> = proofreadFull(apiKey, input, directive, contextBefore, model, onDelta, dictBlock).map { it.text }
+
+    /** Like [proofread], but returns the full accounting for the journal. */
+    fun proofreadFull(
+        apiKey: String,
+        input: String,
+        directive: String = "",
+        contextBefore: String = "",
+        model: String = MODEL_SONNET,
+        onDelta: ((String) -> Unit)? = null,
+        dictBlock: String = "",
+    ): Result<FixResult> = runCatching {
         if (apiKey.isBlank()) throw ApiException("Не задан API-ключ: Настройки клавиатуры → Правка.")
-        val parts = PravkaPrompts.assemble(PravkaPrompts.CLEAN, "", directive, contextBefore)
-        try {
+        val parts = PravkaPrompts.assemble(PravkaPrompts.CLEAN, dictBlock, directive, contextBefore)
+        val started = System.currentTimeMillis()
+        val r = try {
             request(apiKey, model, parts, input, onDelta)
         } catch (e: IOException) {
             request(apiKey, model, parts, input, onDelta)
@@ -51,6 +84,7 @@ object PravkaApi {
             Thread.sleep(1500)
             request(apiKey, model, parts, input, onDelta)
         }
+        r.copy(model = model, latencyMs = System.currentTimeMillis() - started)
     }
 
     private fun request(
@@ -59,7 +93,7 @@ object PravkaApi {
         parts: PravkaPrompts.PromptParts,
         input: String,
         onDelta: ((String) -> Unit)?,
-    ): String {
+    ): FixResult {
         val estimatedInputTokens = input.length / 2 + 1
         // Opus thinks adaptively and thinking tokens count toward max_tokens.
         val thinkingHeadroom = if (model == MODEL_SONNET) 0 else 8000
@@ -123,11 +157,21 @@ object PravkaApi {
             val sb = StringBuilder()
             var stopReason = ""
             var lastEmit = 0L
+            var inputTokens = 0
+            var cacheWrite = 0
+            var cacheRead = 0
+            var outputTokens = 0
             while (true) {
                 val line = source.readUtf8Line() ?: break
                 if (!line.startsWith("data: ")) continue
                 val event = runCatching { JSONObject(line.substring(6)) }.getOrNull() ?: continue
                 when (event.optString("type")) {
+                    "message_start" -> {
+                        val usage = event.optJSONObject("message")?.optJSONObject("usage")
+                        inputTokens = usage?.optInt("input_tokens") ?: 0
+                        cacheWrite = usage?.optInt("cache_creation_input_tokens") ?: 0
+                        cacheRead = usage?.optInt("cache_read_input_tokens") ?: 0
+                    }
                     "content_block_delta" -> {
                         val delta = event.optJSONObject("delta")
                         if (delta?.optString("type") == "text_delta") {
@@ -144,6 +188,7 @@ object PravkaApi {
                     "message_delta" -> {
                         event.optJSONObject("delta")?.optString("stop_reason")
                             ?.takeIf { it.isNotEmpty() }?.let { stopReason = it }
+                        event.optJSONObject("usage")?.let { outputTokens = it.optInt("output_tokens", outputTokens) }
                     }
                     "error" -> {
                         val err = event.optJSONObject("error")
@@ -163,7 +208,12 @@ object PravkaApi {
             }
             if (sb.isEmpty()) throw ApiException("Модель вернула пустой ответ.")
             onDelta?.invoke(sb.toString())
-            return cleanReply(sb.toString())
+            return FixResult(
+                text = cleanReply(sb.toString()),
+                model = model, latencyMs = 0,
+                inputTokens = inputTokens, cacheWriteTokens = cacheWrite,
+                cacheReadTokens = cacheRead, outputTokens = outputTokens,
+            )
         }
     }
 

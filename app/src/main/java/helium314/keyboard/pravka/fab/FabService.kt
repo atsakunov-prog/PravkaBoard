@@ -263,7 +263,7 @@ class FabService : AccessibilityService() {
         }
         if (!GoogleSpeechSession.isAvailable(this)) { toast("Распознавание речи недоступно"); return }
 
-        val newSession = GoogleSpeechSession(this)
+        val newSession = GoogleSpeechSession(this, biasing = helium314.keyboard.pravka.PravkaStore.biasingWords(this))
         session = newSession
         showTicker()
         updateTicker("Говори…")
@@ -309,11 +309,19 @@ class FabService : AccessibilityService() {
                     }.getOrDefault("")
                 }.orEmpty()
                 withContext(Dispatchers.IO) {
-                    PravkaApi.proofread(
-                        apiKey = key, input = text, contextBefore = contextBefore,
+                    val prepared = helium314.keyboard.pravka.PravkaStore.prepare(this@FabService, text)
+                    PravkaApi.proofreadFull(
+                        apiKey = key, input = prepared.text, contextBefore = contextBefore,
                         onDelta = { partial -> scope.launch { updateTicker(partial) } },
+                        dictBlock = prepared.dictBlock,
                     )
-                }.getOrElse { e -> toast("Вставил без чистки: ${e.message}"); text }
+                }.onSuccess { fix ->
+                    helium314.keyboard.pravka.PravkaStore.appendHistory(
+                        this@FabService, "fab", fix, text, fix.text, fix.text.trim() != text.trim(), null)
+                }.onFailure { e ->
+                    helium314.keyboard.pravka.PravkaStore.appendHistory(
+                        this@FabService, "fab", null, text, "", false, e.message)
+                }.map { it.text }.getOrElse { e -> toast("Вставил без чистки: ${e.message}"); text }
             }
             hideTicker()
             setBusyLook(false)
@@ -355,10 +363,19 @@ class FabService : AccessibilityService() {
         val pinned = WeakReference(node)
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                PravkaApi.proofread(
-                    apiKey = key, input = text,
+                val prepared = helium314.keyboard.pravka.PravkaStore.prepare(this@FabService, text)
+                PravkaApi.proofreadFull(
+                    apiKey = key, input = prepared.text,
                     onDelta = { partial -> scope.launch { updateTicker(partial) } },
-                )
+                    dictBlock = prepared.dictBlock,
+                ).map { fix ->
+                    helium314.keyboard.pravka.PravkaStore.appendHistory(
+                        this@FabService, "fab", fix, text, fix.text, fix.text.trim() != text.trim(), null)
+                    fix.text
+                }.onFailure { e ->
+                    helium314.keyboard.pravka.PravkaStore.appendHistory(
+                        this@FabService, "fab", null, text, "", false, e.message)
+                }
             }
             busy = false
             hideTicker()

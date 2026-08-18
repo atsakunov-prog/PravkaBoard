@@ -155,25 +155,33 @@ class Pravka(private val ime: LatinIME) {
         busy = true
         overlay.show(if (strong) "…" else text.takeLast(400), buttons = emptyList())
         scope.launch {
+            val prepared = withContext(Dispatchers.IO) { PravkaStore.prepare(ime, text) }
             val result = withContext(Dispatchers.IO) {
-                PravkaApi.proofread(
+                PravkaApi.proofreadFull(
                     apiKey = key,
-                    input = text,
+                    input = prepared.text,
                     directive = directive,
                     model = if (strong) PravkaApi.MODEL_OPUS else PravkaApi.MODEL_SONNET,
                     onDelta = { partial -> scope.launch { overlay.update(partial.takeLast(1200)) } },
+                    dictBlock = prepared.dictBlock,
                 )
             }
             busy = false
             overlay.hide()
-            result.onSuccess { cleaned ->
-                if (cleaned.trim() == text.trim()) {
+            result.onSuccess { fix ->
+                val cleaned = fix.text
+                val changed = cleaned.trim() != text.trim()
+                PravkaStore.appendHistory(ime, "keyboard", fix, text, cleaned, changed, null)
+                if (!changed) {
                     toast("Без изменений")
                 } else {
                     replaceWholeField(cleaned)
                     copyToClipboard(cleaned)
                 }
-            }.onFailure { e -> toast(e.message ?: "Ошибка Правки") }
+            }.onFailure { e ->
+                PravkaStore.appendHistory(ime, "keyboard", null, text, "", false, e.message)
+                toast(e.message ?: "Ошибка Правки")
+            }
         }
     }
 
@@ -223,7 +231,7 @@ class Pravka(private val ime: LatinIME) {
         }
         if (!GoogleSpeechSession.isAvailable(ime)) { toast("Распознавание речи недоступно"); return }
 
-        val s = GoogleSpeechSession(ime)
+        val s = GoogleSpeechSession(ime, biasing = PravkaStore.biasingWords(ime))
         session = s
         pendingDirective = ""
         overlay.show(
@@ -274,22 +282,30 @@ class Pravka(private val ime: LatinIME) {
         pendingDirective = ""
         scope.launch {
             val context = contextBeforeCursor()
+            val prepared = withContext(Dispatchers.IO) { PravkaStore.prepare(ime, text) }
             val result = withContext(Dispatchers.IO) {
-                PravkaApi.proofread(
+                PravkaApi.proofreadFull(
                     apiKey = key,
-                    input = text,
+                    input = prepared.text,
                     directive = directive,
                     contextBefore = context,
                     model = if (directive.isBlank()) PravkaApi.MODEL_SONNET else PravkaApi.MODEL_OPUS,
                     onDelta = { partial -> scope.launch { overlay.update(partial.takeLast(1200)) } },
+                    dictBlock = prepared.dictBlock,
                 )
             }
             busy = false
             overlay.hide()
-            val final = result.getOrNull() ?: text  // never lose the words
+            val final = result.getOrNull()?.text ?: text  // never lose the words
             insertAtCursor(final)
             copyToClipboard(final)
-            result.onFailure { e -> toast("Вставил без чистки: ${e.message}") }
+            result.onSuccess { fix ->
+                PravkaStore.appendHistory(ime, "keyboard", fix, text, fix.text, fix.text.trim() != text.trim(), null)
+            }
+            result.onFailure { e ->
+                PravkaStore.appendHistory(ime, "keyboard", null, text, "", false, e.message)
+                toast("Вставил без чистки: ${e.message}")
+            }
         }
     }
 
