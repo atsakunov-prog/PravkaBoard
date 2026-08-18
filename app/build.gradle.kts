@@ -15,13 +15,27 @@ android {
         applicationId = "helium314.keyboard"
         minSdk = 21
         targetSdk = 36
-        versionCode = 4006
-        versionName = "4.0-dev1"
+        // PravkaBoard: CI passes -PbuildNumber=<run>; +10000 keeps it above
+        // upstream's 4006 so every CI build installs over the previous one.
+        versionCode = (project.findProperty("buildNumber") as String?)?.toIntOrNull()?.plus(10000) ?: 4006
+        versionName = "4.0-pravka" + ((project.findProperty("buildNumber") as String?)?.let { ".$it" } ?: "")
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+    }
+
+    // PravkaBoard: ONE committed keystore for all builds - the per-runner debug
+    // key made every CI build unable to install over the previous one. This is
+    // a personal-sideload signing key, not a Play key.
+    signingConfigs {
+        create("shared") {
+            storeFile = rootProject.file("keystore/pravkaboard.jks")
+            storePassword = "pravkaboard-keystore-2026"
+            keyAlias = "pravkaboard"
+            keyPassword = "pravkaboard-keystore-2026"
+        }
     }
 
     buildTypes {
@@ -43,6 +57,7 @@ android {
             isMinifyEnabled = true
             isJniDebuggable = false
             applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("shared")
         }
         create("runTests") { // build variant for running tests on CI that skips tests known to fail
             isMinifyEnabled = false

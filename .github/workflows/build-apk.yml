@@ -30,7 +30,7 @@ jobs:
           cache: gradle
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug -PbuildNumber=${{ github.run_number }} --no-daemon
 
       - name: Publish APK to apk-builds branch
         run: |

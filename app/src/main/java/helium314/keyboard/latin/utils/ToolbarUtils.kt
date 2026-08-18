@@ -139,10 +139,11 @@ enum class ToolbarMode {
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
 val defaultToolbarPref by lazy {
-    // PravkaBoard: the owner's toolbar layout is the factory default.
+    // PravkaBoard: factory default mirrors the owner's Yandex-keyboard nav row
+    // (|<  select-all  ^  <  select  >  v  copy  paste  >|), then the Pravka keys.
     val default = listOf(
-        UP, DOWN, LEFT, RIGHT, PRAVKA_VOICE, PRAVKA_POLISH, PRAVKA_CLEAN, SETTINGS, CLIPBOARD,
-        UNDO, REDO, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, DPAD, SPLIT,
+        PAGE_START, SELECT_ALL, UP, LEFT, SELECT_WORD, RIGHT, DOWN, COPY, PASTE, PAGE_END,
+        PRAVKA_VOICE, PRAVKA_POLISH, PRAVKA_CLEAN, SETTINGS, CLIPBOARD, UNDO, REDO, CUT, DPAD, SPLIT,
     )
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }
     default.joinToString(Separators.ENTRY) { it.name + Separators.KV + true } + Separators.ENTRY +
