@@ -409,6 +409,7 @@ class FabService : AccessibilityService() {
                 hapticError()
                 toast(msg)
             },
+            onLog = { line -> helium314.keyboard.pravka.PravkaStore.logEvent(this, "fab $line") },
         )
         dictationTarget = focusedEditableNode()?.let { WeakReference(it) }
     }

@@ -57,7 +57,10 @@ fun PravkaScreen(
                 androidx.compose.foundation.layout.Row {
                     Button(onClick = onClickHistory) { Text("История") }
                     Spacer(Modifier.padding(horizontal = 6.dp))
-                    Button(onClick = onClickDictionary) { Text("Словарь") }
+                    // The entry count doubles as a diagnostic: an empty dictionary
+                    // means no recognizer biasing and no prompt hints.
+                    val dictCount = remember { helium314.keyboard.pravka.PravkaStore.dictionary(ctx).size }
+                    Button(onClick = onClickDictionary) { Text("Словарь ($dictCount)") }
                 }
                 Spacer(Modifier.height(24.dp))
                 Text("API-ключ Anthropic", style = MaterialTheme.typography.titleMedium)

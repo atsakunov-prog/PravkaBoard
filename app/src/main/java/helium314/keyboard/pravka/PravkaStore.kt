@@ -85,6 +85,34 @@ object PravkaStore {
             .take(limit)
             .toList()
 
+    // ---- diagnostic event log: the recognizer's internals (segment mode,
+    // biasing size, restarts, errors) - the evidence that pinpoints every
+    // "почему не расшифровалось". Viewable from the history screen. ----
+
+    private fun eventsFile(context: Context) = File(context.filesDir, "pravka-events.log")
+
+    fun logEvent(context: Context, line: String) {
+        val at = Date()
+        val app = context.applicationContext
+        disk.execute {
+            runCatching {
+                val f = eventsFile(app)
+                if (f.exists() && f.length() > 512L * 1024) {
+                    val backup = File(app.filesDir, "pravka-events.log.1")
+                    backup.delete()
+                    f.renameTo(backup)
+                }
+                f.appendText(stamp.format(at) + " " + line + "\n")
+            }
+        }
+    }
+
+    /** The newest [limit] journal lines, oldest first. */
+    fun readEvents(context: Context, limit: Int): List<String> =
+        runCatching {
+            eventsFile(context).takeIf { it.exists() }?.readLines()?.takeLast(limit)
+        }.getOrNull() ?: emptyList()
+
     // ---- dictionary ----
 
     enum class DictMode { HARD, HINT, PROTECT }

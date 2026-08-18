@@ -473,6 +473,7 @@ class Pravka(private val ime: LatinIME) {
                 overlay.hide()
                 toast(msg)
             },
+            onLog = { line -> PravkaStore.logEvent(ime, "kbd $line") },
         )
     }
 
@@ -493,6 +494,7 @@ class Pravka(private val ime: LatinIME) {
         }
         overlay.setButtons(emptyList())
         val text = VoiceCommands.apply(rawText)
+        PravkaStore.logEvent(ime, "kbd take raw=${rawText.length} clean=${text.length}")
         if (text.isBlank()) {
             overlay.hide()
             toast("Ничего не расслышал")
@@ -528,6 +530,10 @@ class Pravka(private val ime: LatinIME) {
             busy = false
             overlay.hide()
             val final = result.getOrNull()?.text ?: text  // never lose the words
+            PravkaStore.logEvent(
+                ime,
+                "kbd insert len=${final.length} fixed=${result.isSuccess} ic=${ime.currentInputConnection != null}",
+            )
             insertAtCursor(final)
             copyToClipboard(final)
             result.onSuccess { fix ->

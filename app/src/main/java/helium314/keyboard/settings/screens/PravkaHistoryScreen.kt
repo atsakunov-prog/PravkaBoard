@@ -43,6 +43,7 @@ fun PravkaHistoryScreen(onClickBack: () -> Unit) {
     val totalCost = remember { entries.sumOf { it.optDouble("cost_usd", 0.0) } }
     val errorCount = remember { entries.count { it.has("error") } }
     var expanded by remember { mutableIntStateOf(-1) }
+    var showEvents by remember { androidx.compose.runtime.mutableStateOf(false) }
 
     SearchSettingsScreen(
         onClickBack = onClickBack,
@@ -59,6 +60,28 @@ fun PravkaHistoryScreen(onClickBack: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
+                    Row {
+                        TextButton(onClick = { showEvents = !showEvents }) {
+                            Text(if (showEvents) "Скрыть журнал распознавания" else "Журнал распознавания")
+                        }
+                    }
+                }
+                if (showEvents) {
+                    item {
+                        val events = remember { PravkaStore.readEvents(ctx, 300) }
+                        Text(
+                            if (events.isEmpty()) "Журнал распознавания пуст (появится после первой диктовки в этой сборке)."
+                            else events.joinToString("\n"),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                            ),
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                        TextButton(onClick = { copy(ctx, events.joinToString("\n")) }) {
+                            Text("Копировать журнал")
+                        }
+                        HorizontalDivider()
+                    }
                 }
                 itemsIndexed(entries) { i, e ->
                     HistoryRow(
