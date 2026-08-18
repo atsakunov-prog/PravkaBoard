@@ -40,7 +40,7 @@ object PravkaApi {
         model: String = MODEL_SONNET,
         onDelta: ((String) -> Unit)? = null,
     ): Result<String> = runCatching {
-        if (apiKey.isBlank()) throw ApiException("Не задан API-ключ (долгое нажатие на кнопку Правки).")
+        if (apiKey.isBlank()) throw ApiException("Не задан API-ключ: Настройки клавиатуры → Правка.")
         val parts = PravkaPrompts.assemble(PravkaPrompts.CLEAN, "", directive, contextBefore)
         try {
             request(apiKey, model, parts, input, onDelta)

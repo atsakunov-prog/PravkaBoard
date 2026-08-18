@@ -93,7 +93,7 @@ class Pravka(private val ime: LatinIME) {
         val text = extracted?.text?.toString().orEmpty()
         if (text.isBlank()) { toast("Поле пустое — нечего править."); return }
         val key = apiKey()
-        if (key.isBlank()) { toast("Нет API-ключа: скопируй ключ и сделай долгое нажатие на кнопку Правки."); return }
+        if (key.isBlank()) { toast("Нет API-ключа: Настройки клавиатуры → Правка."); return }
 
         busy = true
         overlay.show(if (strong) "…" else text.takeLast(400))
@@ -186,7 +186,7 @@ class Pravka(private val ime: LatinIME) {
             // No key - at least deliver the raw take.
             overlay.hide()
             insertAtCursor(text)
-            toast("Вставил без чистки: нет API-ключа")
+            toast("Вставил без чистки: нет API-ключа (Настройки → Правка)")
             return
         }
         busy = true

@@ -66,18 +66,18 @@ object Defaults {
     const val PREF_MORE_AUTO_CORRECTION = false
     const val PREF_AUTO_CORRECT_CONFIDENCE = 0.24f
     const val PREF_AUTOCORRECT_SHORTCUTS = true
-    const val PREF_BACKSPACE_REVERTS_AUTOCORRECT = true
+    const val PREF_BACKSPACE_REVERTS_AUTOCORRECT = false // PravkaBoard: owner default
     const val PREF_AUTOCORRECT_CAPITALIZED_SUGGESTION = true
     const val PREF_CENTER_SUGGESTION_TEXT_TO_ENTER = false
     const val PREF_SHOW_SUGGESTIONS = true
     const val PREF_ALWAYS_SHOW_SUGGESTIONS = false
     const val PREF_ALWAYS_SHOW_SUGGESTIONS_EXCEPT_WEB_TEXT = true
     const val PREF_KEY_USE_PERSONALIZED_DICTS = true
-    const val PREF_KEY_USE_DOUBLE_SPACE_PERIOD = true
+    const val PREF_KEY_USE_DOUBLE_SPACE_PERIOD = false // PravkaBoard: owner default
     const val PREF_BLOCK_POTENTIALLY_OFFENSIVE = true
-    const val PREF_SHOW_LANGUAGE_SWITCH_KEY = false
+    const val PREF_SHOW_LANGUAGE_SWITCH_KEY = true // PravkaBoard: owner default
     const val PREF_LANGUAGE_SWITCH_KEY = "internal"
-    const val PREF_SHOW_EMOJI_KEY = false
+    const val PREF_SHOW_EMOJI_KEY = true // PravkaBoard: owner default
     const val PREF_VARIABLE_TOOLBAR_DIRECTION = true
     const val PREF_ADDITIONAL_SUBTYPES = "de${Separators.SET}${ExtraValue.KEYBOARD_LAYOUT_SET}=MAIN:qwerty${Separators.SETS}" +
             "fr${Separators.SET}${ExtraValue.KEYBOARD_LAYOUT_SET}=MAIN:qwertz${Separators.SETS}" +
@@ -86,7 +86,7 @@ object Defaults {
     @JvmField
     val PREF_SPLIT_SPACER_SCALE = Array(4) { DEFAULT_SIZE_SCALE }
     @JvmField
-    val PREF_KEYBOARD_HEIGHT_SCALE = Array(4) { DEFAULT_SIZE_SCALE }
+    val PREF_KEYBOARD_HEIGHT_SCALE = Array(4) { 0.805f } // PravkaBoard: owner default
     @JvmField
     val PREF_BOTTOM_ROW_SCALE = Array(4) { DEFAULT_SIZE_SCALE }
     @JvmField
@@ -102,7 +102,7 @@ object Defaults {
     const val PREF_EMOJI_KEY_FIT = true
     const val PREF_EMOJI_SKIN_TONE = ""
     @JvmField
-    val PREF_SPACE_HORIZONTAL_SWIPE = KeyboardActionListener.SwipeAction.MOVE_CURSOR.name
+    val PREF_SPACE_HORIZONTAL_SWIPE = KeyboardActionListener.SwipeAction.SWITCH_LANGUAGE.name // PravkaBoard: owner default
     @JvmField
     val PREF_SPACE_VERTICAL_SWIPE = KeyboardActionListener.SwipeAction.NONE.name
     const val PREF_DELETE_SWIPE = true
@@ -110,7 +110,7 @@ object Defaults {
     const val PREF_AUTOSPACE_AFTER_SUGGESTION = true
     const val PREF_AUTOSPACE_AFTER_GESTURE_TYPING = true
     const val PREF_AUTOSPACE_BEFORE_GESTURE_TYPING = true
-    const val PREF_SHIFT_REMOVES_AUTOSPACE = false
+    const val PREF_SHIFT_REMOVES_AUTOSPACE = true // PravkaBoard: owner default
     const val PREF_ALWAYS_INCOGNITO_MODE = false
     const val PREF_BIGRAM_PREDICTIONS = true
     const val PREF_SUGGEST_PUNCTUATION = false
@@ -136,12 +136,12 @@ object Defaults {
     @SuppressLint("RtlHardcoded")
     const val PREF_ONE_HANDED_GRAVITY = Gravity.LEFT
     const val PREF_ONE_HANDED_SCALE = 1f
-    const val PREF_SHOW_NUMBER_ROW = false
+    const val PREF_SHOW_NUMBER_ROW = true // PravkaBoard: owner default
     const val PREF_SHOW_NUMBER_ROW_IN_SYMBOLS = true
     const val PREF_LOCALIZED_NUMBER_ROW = true
     const val PREF_SHOW_NUMBER_ROW_HINTS = false
     const val PREF_CUSTOM_CURRENCY_KEY = ""
-    const val PREF_SHOW_HINTS = true
+    const val PREF_SHOW_HINTS = false // PravkaBoard: owner default
     const val PREF_POPUP_KEYS_ORDER = POPUP_KEYS_ORDER_DEFAULT
     const val PREF_POPUP_KEYS_HINT_ORDER = POPUP_KEYS_LABEL_DEFAULT
     const val PREF_SHOW_POPUP_HINTS = false
@@ -169,7 +169,7 @@ object Defaults {
     const val PREF_QUICK_PIN_TOOLBAR_KEYS = false
     val PREF_PINNED_TOOLBAR_KEYS = defaultPinnedToolbarPref
     val PREF_TOOLBAR_KEYS = defaultToolbarPref
-    const val PREF_AUTO_SHOW_TOOLBAR = false
+    const val PREF_AUTO_SHOW_TOOLBAR = true // PravkaBoard: owner default
     const val PREF_AUTO_HIDE_TOOLBAR = false
     val PREF_CLIPBOARD_TOOLBAR_KEYS = defaultClipboardToolbarPref
     const val PREF_ABC_AFTER_EMOJI = false
