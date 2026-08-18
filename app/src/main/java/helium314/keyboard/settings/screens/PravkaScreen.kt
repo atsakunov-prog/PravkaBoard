@@ -236,6 +236,40 @@ fun PravkaScreen(
                         "Распознаёт Google (на устройстве, без интернета). Словарь подсказывает " +
                             "распознавателю твои имена и термины — чем полнее словарь, тем точнее."
                     )
+                    Spacer(Modifier.height(12.dp))
+                    var fmt by remember { mutableStateOf(prefs.getBoolean("speech_formatting", true)) }
+                    var seg by remember { mutableStateOf(prefs.getBoolean("speech_segmented", false)) }
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        androidx.compose.material3.Switch(
+                            checked = fmt,
+                            onCheckedChange = {
+                                fmt = it
+                                prefs.edit().putBoolean("speech_formatting", it).apply()
+                            },
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Пунктуация распознавателя", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    HintText(
+                        "С ней распознаватель точнее подбирает слова; лишние точки на " +
+                            "паузах Правка всё равно расставляет заново."
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        androidx.compose.material3.Switch(
+                            checked = seg,
+                            onCheckedChange = {
+                                seg = it
+                                prefs.edit().putBoolean("speech_segmented", it).apply()
+                            },
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Непрерывная сессия (эксперимент)", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    HintText(
+                        "Одна сессия без перезапусков на паузах. На длинных диктовках " +
+                            "спотыкалась на редких словах и теряла хвосты — по умолчанию выключена."
+                    )
                 }
 
                 SectionCard(label = "Как пользоваться") {

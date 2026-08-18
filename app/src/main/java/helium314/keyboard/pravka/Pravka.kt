@@ -455,7 +455,12 @@ class Pravka(private val ime: LatinIME) {
         }
         if (!GoogleSpeechSession.isAvailable(ime)) { toast("Распознавание речи недоступно"); return }
 
-        val s = GoogleSpeechSession(ime, biasing = PravkaStore.biasingWords(ime))
+        val s = GoogleSpeechSession(
+            ime,
+            biasing = PravkaStore.biasingWords(ime),
+            formatting = prefs().getBoolean("speech_formatting", true),
+            segmentedSession = prefs().getBoolean("speech_segmented", false),
+        )
         session = s
         pendingDirective = ""
         discardTake = false

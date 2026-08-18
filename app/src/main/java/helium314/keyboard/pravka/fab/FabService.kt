@@ -408,7 +408,13 @@ class FabService : AccessibilityService() {
         }
         if (!GoogleSpeechSession.isAvailable(this)) { toast("Распознавание речи недоступно"); return }
 
-        val newSession = GoogleSpeechSession(this, biasing = helium314.keyboard.pravka.PravkaStore.biasingWords(this))
+        val fabPrefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val newSession = GoogleSpeechSession(
+            this,
+            biasing = helium314.keyboard.pravka.PravkaStore.biasingWords(this),
+            formatting = fabPrefs.getBoolean("speech_formatting", true),
+            segmentedSession = fabPrefs.getBoolean("speech_segmented", false),
+        )
         session = newSession
         showTicker()
         updateTicker("Говори…")
