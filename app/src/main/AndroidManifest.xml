@@ -30,6 +30,19 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
             tools:remove="android:appComponentFactory"
             tools:targetApi="33">
 
+        <!-- PravkaBoard: the Pravka floating button (dictate/fix without the keyboard) -->
+        <service android:name="helium314.keyboard.pravka.fab.FabService"
+                android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+                android:label="@string/pravka_fab_label"
+                android:exported="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/pravka_fab_config" />
+        </service>
+
         <!-- PravkaBoard: invisible one-shot mic-permission request -->
         <activity android:name="helium314.keyboard.pravka.MicPermissionActivity"
                 android:exported="false"

@@ -91,6 +91,27 @@ fun PravkaScreen(onClickBack: () -> Unit) {
                         "«Панель инструментов».",
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                Spacer(Modifier.height(24.dp))
+                Text("Плавающая кнопка", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Кнопка «П» поверх любых приложений — для диктовки и правки, " +
+                        "когда клавиатура не открыта (например, при чтении PDF). " +
+                        "Короткое нажатие — диктовка, долгое — правка поля. " +
+                        "Включается в спец. возможностях Android.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    runCatching {
+                        ctx.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }) {
+                    Text("Открыть спец. возможности")
+                }
             }
         }
     }
