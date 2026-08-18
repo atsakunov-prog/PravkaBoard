@@ -1,0 +1,4 @@
+build=22
+commit=55d88849e1b662edbe7c788380e7ad9ba47775b8
+branch=claude/pravka-integration
+builtAt=2026-08-18T15:36Z
