@@ -22,8 +22,8 @@ object Defaults {
     fun initDynamicDefaults(context: Context) {
         PREF_GESTURE_DYNAMIC_PREVIEW_FOLLOW_SYSTEM = getTransitionAnimationScale(context) != 0.0f
         val dm = context.resources.displayMetrics
-        val px600 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 600f, dm)
-        PREF_POPUP_ON = dm.widthPixels >= px600 || dm.heightPixels >= px600
+        // PravkaBoard: owner default - key press popups off regardless of screen size
+        PREF_POPUP_ON = false
     }
 
     // must correspond to a file name
@@ -48,7 +48,7 @@ object Defaults {
     fun PREF_ICON_STYLE(prefs: SharedPreferences) = prefs.getString(Settings.PREF_THEME_STYLE, PREF_THEME_STYLE)!!
     const val PREF_THEME_COLORS = KeyboardTheme.THEME_LIGHT
     const val PREF_THEME_COLORS_NIGHT = KeyboardTheme.THEME_DARK
-    const val PREF_THEME_KEY_BORDERS = false
+    const val PREF_THEME_KEY_BORDERS = true // PravkaBoard: owner default
     @JvmField
     val PREF_THEME_DAY_NIGHT = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     const val PREF_CUSTOM_ICON_NAMES = ""
@@ -75,7 +75,7 @@ object Defaults {
     const val PREF_KEY_USE_PERSONALIZED_DICTS = true
     const val PREF_KEY_USE_DOUBLE_SPACE_PERIOD = false // PravkaBoard: owner default
     const val PREF_BLOCK_POTENTIALLY_OFFENSIVE = true
-    const val PREF_SHOW_LANGUAGE_SWITCH_KEY = true // PravkaBoard: owner default
+    const val PREF_SHOW_LANGUAGE_SWITCH_KEY = false // PravkaBoard: owner default (turned back off)
     const val PREF_LANGUAGE_SWITCH_KEY = "internal"
     const val PREF_SHOW_EMOJI_KEY = true // PravkaBoard: owner default
     const val PREF_VARIABLE_TOOLBAR_DIRECTION = true
@@ -86,17 +86,19 @@ object Defaults {
     @JvmField
     val PREF_SPLIT_SPACER_SCALE = Array(4) { DEFAULT_SIZE_SCALE }
     @JvmField
-    val PREF_KEYBOARD_HEIGHT_SCALE = Array(4) { 0.805f } // PravkaBoard: owner default
+    // PravkaBoard: owner defaults per fold state (portrait, landscape, folded-portrait, folded-landscape)
+    val PREF_KEYBOARD_HEIGHT_SCALE = arrayOf(0.702f, 0.805f, 1.103f, 1.5f)
     @JvmField
     val PREF_BOTTOM_ROW_SCALE = Array(4) { DEFAULT_SIZE_SCALE }
     @JvmField
-    // DEFAULT_SIZE_SCALE for portrait, 0 for landscape (normal and folded)
-    val PREF_BOTTOM_PADDING_SCALE = arrayOf(DEFAULT_SIZE_SCALE, 0f, DEFAULT_SIZE_SCALE, 0f)
+    // PravkaBoard: owner default - no bottom padding anywhere
+    val PREF_BOTTOM_PADDING_SCALE = arrayOf(0f, 0f, 0f, 0f)
     @JvmField
-    val PREF_SIDE_PADDING_SCALE = Array(8) { 0f }
+    // PravkaBoard: owner default - side padding on the wide fold screen
+    val PREF_SIDE_PADDING_SCALE = arrayOf(0.739f, 0.823f, 0f, 0f, 0f, 0f, 0f, 0f)
     @JvmField
     val PREF_KEY_GAP_SCALE = Array(4) { DEFAULT_SIZE_SCALE }
-    const val PREF_FONT_SCALE = DEFAULT_SIZE_SCALE
+    const val PREF_FONT_SCALE = 1.106f // PravkaBoard: owner default
     const val PREF_HINT_FONT_SCALE = DEFAULT_SIZE_SCALE
     const val PREF_EMOJI_FONT_SCALE = DEFAULT_SIZE_SCALE
     const val PREF_EMOJI_KEY_FIT = true

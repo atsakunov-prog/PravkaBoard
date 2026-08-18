@@ -44,9 +44,16 @@ class Pravka(private val ime: LatinIME) {
         toast("Правка: ${e.javaClass.simpleName} ${e.message ?: ""}")
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + crashLogger)
-    private val overlay = PravkaOverlay().apply { onTap = { stopDictation() } }
+    private val overlay = PravkaOverlay().apply {
+        onStop = { stopDictation() }
+        onStopWith = { directive -> pendingDirective = directive; stopDictation() }
+    }
     private var session: GoogleSpeechSession? = null
     private var busy = false
+
+    // Set by the overlay's one-tap finishers ("Причесать"/"Короче"): applied
+    // on top of the CLEAN pass for the take that is being stopped.
+    private var pendingDirective: String = ""
 
     private fun prefs() = ime.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun apiKey(): String = prefs().getString(KEY_API, "").orEmpty()
@@ -97,6 +104,7 @@ class Pravka(private val ime: LatinIME) {
 
         busy = true
         overlay.show(if (strong) "…" else text.takeLast(400))
+        overlay.hideButtons()  // buttons belong to dictation, not the field fix
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 PravkaApi.proofread(
@@ -156,6 +164,7 @@ class Pravka(private val ime: LatinIME) {
 
         val s = GoogleSpeechSession(ime)
         session = s
+        pendingDirective = ""
         overlay.show("Говори…")
         s.start(
             onPartial = { live -> overlay.update(live.takeLast(1200)) },
@@ -175,6 +184,7 @@ class Pravka(private val ime: LatinIME) {
 
     private fun onDictationDone(rawText: String) {
         session = null
+        overlay.hideButtons()
         val text = VoiceCommands.apply(rawText)
         if (text.isBlank()) {
             overlay.hide()
@@ -191,13 +201,18 @@ class Pravka(private val ime: LatinIME) {
         }
         busy = true
         overlay.update("…")
+        // "Причесать"/"Короче" on the panel: an extra pass on the strong model.
+        val directive = pendingDirective
+        pendingDirective = ""
         scope.launch {
             val context = contextBeforeCursor()
             val result = withContext(Dispatchers.IO) {
                 PravkaApi.proofread(
                     apiKey = key,
                     input = text,
+                    directive = directive,
                     contextBefore = context,
+                    model = if (directive.isBlank()) PravkaApi.MODEL_SONNET else PravkaApi.MODEL_OPUS,
                     onDelta = { partial -> scope.launch { overlay.update(partial.takeLast(1200)) } },
                 )
             }
