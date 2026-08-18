@@ -51,8 +51,7 @@ class Pravka(private val ime: LatinIME) {
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + crashLogger)
     private val overlay = PravkaOverlay().apply {
-        onStop = { stopDictation() }
-        onStopWith = { directive -> pendingDirective = directive; stopDictation() }
+        onTextTap = { if (session != null) stopDictation() }
     }
     private var session: GoogleSpeechSession? = null
     private var busy = false
@@ -67,14 +66,21 @@ class Pravka(private val ime: LatinIME) {
     private fun toast(msg: String) =
         Toast.makeText(ime.applicationContext, msg, Toast.LENGTH_LONG).show()
 
-    /** Returns true when the code was one of ours and has been handled. */
-    fun onToolbarKey(code: Int): Boolean {
+    /**
+     * Returns true when the code was one of ours and has been handled.
+     * [fromToolbar]: the press came from the toolbar (opens the panel hub)
+     * rather than a keyboard key (acts immediately).
+     */
+    fun onToolbarKey(code: Int, fromToolbar: Boolean = true): Boolean {
         when (code) {
-            KeyCode.PRAVKA_CLEAN -> cleanField(directive = "", strong = false)
+            KeyCode.PRAVKA_CLEAN ->
+                if (fromToolbar) showFixHub() else cleanField(directive = "", strong = false)
             KeyCode.PRAVKA_SHORTER -> cleanField(PravkaPrompts.REDO_SHORTER, strong = true)
             KeyCode.PRAVKA_LONGER -> cleanField(PravkaPrompts.REDO_LONGER, strong = true)
             KeyCode.PRAVKA_POLISH -> cleanField(PravkaPrompts.REDO_POLISH, strong = true)
-            KeyCode.PRAVKA_VOICE -> toggleDictation()
+            KeyCode.PRAVKA_VOICE ->
+                if (fromToolbar && session == null && !busy) showDictationLobby()
+                else toggleDictation()
             KeyCode.PRAVKA_SET_KEY -> setApiKeyFromClipboard()
             KeyCode.PRAVKA_SELECT -> {
                 selectionLatch = !selectionLatch
@@ -113,19 +119,41 @@ class Pravka(private val ime: LatinIME) {
 
     // ---- Whole-field fix (Pravka button and the redo chips) ----
 
+    private fun fieldText(): String {
+        val ic = ime.currentInputConnection ?: return ""
+        val extracted = runCatching { ic.getExtractedText(ExtractedTextRequest(), 0) }.getOrNull()
+        return extracted?.text?.toString().orEmpty()
+    }
+
+    /** The "П" hub: the panel shows the field text and every rework action. */
+    private fun showFixHub() {
+        if (busy) { toast("Уже работаю…"); return }
+        if (session != null) { stopDictation(); return }
+        if (overlay.isShowing) { overlay.hide(); return }  // second tap closes
+        val text = fieldText()
+        if (text.isBlank()) { toast("Поле пустое — нечего править."); return }
+        overlay.show(
+            text.takeLast(600),
+            listOf(
+                PravkaOverlay.Button("Отмена") { overlay.hide() },
+                PravkaOverlay.Button("Почистить", big = true) { cleanField("", strong = false) },
+                PravkaOverlay.Button("Причесать") { cleanField(PravkaPrompts.REDO_POLISH, strong = true) },
+                PravkaOverlay.Button("Короче") { cleanField(PravkaPrompts.REDO_SHORTER, strong = true) },
+                PravkaOverlay.Button("Длиннее") { cleanField(PravkaPrompts.REDO_LONGER, strong = true) },
+            ),
+        )
+    }
+
     private fun cleanField(directive: String, strong: Boolean) {
         if (busy) { toast("Уже работаю…"); return }
         if (session != null) { stopDictation(); return }
-        val ic = ime.currentInputConnection ?: return
-        val extracted = runCatching { ic.getExtractedText(ExtractedTextRequest(), 0) }.getOrNull()
-        val text = extracted?.text?.toString().orEmpty()
+        val text = fieldText()
         if (text.isBlank()) { toast("Поле пустое — нечего править."); return }
         val key = apiKey()
         if (key.isBlank()) { toast("Нет API-ключа: Настройки клавиатуры → Правка."); return }
 
         busy = true
-        overlay.show(if (strong) "…" else text.takeLast(400))
-        overlay.hideButtons()  // buttons belong to dictation, not the field fix
+        overlay.show(if (strong) "…" else text.takeLast(400), buttons = emptyList())
         scope.launch {
             val result = withContext(Dispatchers.IO) {
                 PravkaApi.proofread(
@@ -170,6 +198,18 @@ class Pravka(private val ime: LatinIME) {
 
     // ---- Dictation: the key area becomes the live text panel ----
 
+    /** Toolbar mic: the panel opens first with a big "Начать". */
+    private fun showDictationLobby() {
+        if (overlay.isShowing) { overlay.hide(); return }  // second tap closes
+        overlay.show(
+            "Диктовка: нажми «Начать» и говори.",
+            listOf(
+                PravkaOverlay.Button("Отмена") { overlay.hide() },
+                PravkaOverlay.Button("Начать", big = true) { toggleDictation() },
+            ),
+        )
+    }
+
     private fun toggleDictation() {
         if (session != null) { stopDictation(); return }
         if (busy) { toast("Уже работаю…"); return }
@@ -186,7 +226,14 @@ class Pravka(private val ime: LatinIME) {
         val s = GoogleSpeechSession(ime)
         session = s
         pendingDirective = ""
-        overlay.show("Говори…")
+        overlay.show(
+            "Говори…",
+            listOf(
+                PravkaOverlay.Button("Причесать") { pendingDirective = PravkaPrompts.REDO_POLISH; stopDictation() },
+                PravkaOverlay.Button("■  Закончить", big = true) { stopDictation() },
+                PravkaOverlay.Button("Короче") { pendingDirective = PravkaPrompts.REDO_SHORTER; stopDictation() },
+            ),
+        )
         s.start(
             onPartial = { live -> overlay.update(live.takeLast(1200)) },
             onCheckpoint = { },
@@ -205,7 +252,7 @@ class Pravka(private val ime: LatinIME) {
 
     private fun onDictationDone(rawText: String) {
         session = null
-        overlay.hideButtons()
+        overlay.setButtons(emptyList())
         val text = VoiceCommands.apply(rawText)
         if (text.isBlank()) {
             overlay.hide()

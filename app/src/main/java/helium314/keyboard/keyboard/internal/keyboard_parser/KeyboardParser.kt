@@ -62,30 +62,19 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         }
         val baseKeys = LayoutParser.parseLayout(layoutType, params, context)
         val keysInRows = createRows(baseKeys)
-        // PravkaBoard: a nav row under the bottom row (owner's request).
-        // Folded (outer screen): select-all + selection latch | arrows | copy, paste.
-        // Unfolded: a PC-style arrow cluster on the right, selection latch beside it.
+        // PravkaBoard: the nav row sits at the TOP of the key area (right above
+        // the number row), identical in folded and unfolded states:
+        // select-all + selection latch | arrows | copy, paste (owner's request).
         if (params.mId.element.isAlphaOrSymbol) {
-            val folded = helium314.keyboard.latin.utils.FoldableUtils.isFolded
+            val labels = listOf("select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
             val navRow = ArrayList<KeyParams>()
-            if (folded) {
-                val labels = listOf("select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
-                labels.forEach { label ->
-                    navRow.add(
-                        TextKeyData(label = label, width = 1f / labels.size, type = KeyType.FUNCTION)
-                            .toKeyParams(params, defaultLabelFlags)
-                    )
-                }
-            } else {
-                navRow.add(KeyParams.newSpacer(params, 0.5f))
-                listOf("pravka_select", "left", "up", "down", "right").forEach { label ->
-                    navRow.add(
-                        TextKeyData(label = label, width = 0.1f, type = KeyType.FUNCTION)
-                            .toKeyParams(params, defaultLabelFlags)
-                    )
-                }
+            labels.forEach { label ->
+                navRow.add(
+                    TextKeyData(label = label, width = 1f / labels.size, type = KeyType.FUNCTION)
+                        .toKeyParams(params, defaultLabelFlags)
+                )
             }
-            keysInRows.add(navRow)
+            keysInRows.add(0, navRow)
         }
         val heightRescale: Float
         if (params.mId.element.isBottomRow) {

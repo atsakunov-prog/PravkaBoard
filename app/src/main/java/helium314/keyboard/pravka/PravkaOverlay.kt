@@ -10,25 +10,23 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.core.view.isVisible
 import helium314.keyboard.keyboard.KeyboardSwitcher
 
-// The dictation surface: while a take (or a streaming fix) is live, the key
-// area is covered by a dark panel where the text appears - "the keyboard
-// becomes the ticker". A button row sits at the bottom: a big STOP in the
-// middle plus one-tap finishers that stop AND apply a style pass in one go.
+// The Pravka surface: covers the key area with a dark panel that shows text
+// (live dictation, streaming fixes) and a configurable button row - the
+// panel is the hub for starting/stopping dictation and one-tap rework
+// actions. The toolbar above stays usable.
 class PravkaOverlay {
+
+    class Button(val label: String, val big: Boolean = false, val onClick: () -> Unit)
 
     private var panel: LinearLayout? = null
     private var textView: TextView? = null
     private var scroll: ScrollView? = null
-    private var buttons: LinearLayout? = null
+    private var buttonRow: LinearLayout? = null
 
-    /** Plain stop (also fired by tapping the text area). */
-    var onStop: (() -> Unit)? = null
-
-    /** Stop and run this extra directive after the CLEAN pass. */
-    var onStopWith: ((directive: String) -> Unit)? = null
+    /** Tap on the text area (used as "stop" during a live take). */
+    var onTextTap: (() -> Unit)? = null
 
     private fun host(): ViewGroup? =
         KeyboardSwitcher.getInstance().mainKeyboardView?.parent as? ViewGroup
@@ -36,24 +34,29 @@ class PravkaOverlay {
     private fun dp(parent: ViewGroup, v: Int) =
         (v * parent.context.resources.displayMetrics.density).toInt()
 
-    private fun pill(parent: ViewGroup, label: String, big: Boolean, onClick: () -> Unit): TextView =
+    private fun pill(parent: ViewGroup, b: Button): TextView =
         TextView(parent.context).apply {
-            text = label
+            text = b.label
             setTextColor(0xFFF7F3EA.toInt())
-            textSize = if (big) 16f else 13f
-            typeface = if (big) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            textSize = if (b.big) 16f else 13f
+            typeface = if (b.big) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
-                cornerRadius = dp(parent, 20).toFloat()
-                setColor(if (big) 0xFFEA580C.toInt() else 0x33FFFFFF)
+                cornerRadius = dp(parent, 22).toFloat()
+                setColor(if (b.big) 0xFFEA580C.toInt() else 0x33FFFFFF)
             }
-            setPadding(dp(parent, if (big) 22 else 12), dp(parent, 10), dp(parent, if (big) 22 else 12), dp(parent, 10))
-            setOnClickListener { onClick() }
+            setPadding(dp(parent, if (b.big) 26 else 13), dp(parent, 11), dp(parent, if (b.big) 26 else 13), dp(parent, 11))
+            setOnClickListener { b.onClick() }
         }
 
     @SuppressLint("ClickableViewAccessibility")
-    fun show(hint: String) {
-        if (panel != null) { update(hint); return }
+    fun show(hint: String, buttons: List<Button> = emptyList()) {
+        if (panel == null) build()
+        update(hint)
+        setButtons(buttons)
+    }
+
+    private fun build() {
         val parent = host() ?: return
         val tv = TextView(parent.context).apply {
             setTextColor(0xFFF7F3EA.toInt())
@@ -61,7 +64,6 @@ class PravkaOverlay {
             setLineSpacing(0f, 1.15f)
             val pad = dp(parent, 16)
             setPadding(pad, pad, pad, pad)
-            text = hint
         }
         val sc = ScrollView(parent.context).apply {
             isFillViewport = true
@@ -73,25 +75,16 @@ class PravkaOverlay {
                     Gravity.BOTTOM,
                 ),
             )
-            setOnClickListener { onStop?.invoke() }
+            setOnClickListener { onTextTap?.invoke() }
         }
         val btnRow = LinearLayout(parent.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             val pad = dp(parent, 8)
-            setPadding(pad, pad, pad, pad + dp(parent, 4))
+            // The owner found the buttons glued to the very bottom edge -
+            // keep them comfortably above it.
+            setPadding(pad, pad, pad, dp(parent, 28))
         }
-        fun addButton(v: TextView) {
-            val lp = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { marginStart = dp(parent, 6); marginEnd = dp(parent, 6) }
-            btnRow.addView(v, lp)
-        }
-        addButton(pill(parent, "Причесать", big = false) { onStopWith?.invoke(PravkaPrompts.REDO_POLISH) })
-        addButton(pill(parent, "■  Стоп", big = true) { onStop?.invoke() })
-        addButton(pill(parent, "Короче", big = false) { onStopWith?.invoke(PravkaPrompts.REDO_SHORTER) })
-
         val column = LinearLayout(parent.context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0xF5241F19.toInt())  // near-opaque ink
@@ -100,7 +93,7 @@ class PravkaOverlay {
         }
         textView = tv
         scroll = sc
-        buttons = btnRow
+        buttonRow = btnRow
         panel = column
         runCatching {
             parent.addView(
@@ -113,6 +106,19 @@ class PravkaOverlay {
         }
     }
 
+    fun setButtons(buttons: List<Button>) {
+        val row = buttonRow ?: return
+        val parent = row.parent as? ViewGroup ?: return
+        row.removeAllViews()
+        buttons.forEach { b ->
+            val lp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginStart = dp(parent, 5); marginEnd = dp(parent, 5) }
+            row.addView(pill(parent, b), lp)
+        }
+    }
+
     fun update(text: String) {
         val tv = textView ?: return
         tv.text = text
@@ -120,17 +126,12 @@ class PravkaOverlay {
         scroll?.post { scroll?.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 
-    /** The take ended, the fix is streaming: buttons are no longer applicable. */
-    fun hideButtons() {
-        buttons?.isVisible = false
-    }
-
     fun hide() {
         val p = panel ?: return
         panel = null
         textView = null
         scroll = null
-        buttons = null
+        buttonRow = null
         runCatching { (p.parent as? ViewGroup)?.removeView(p) }
     }
 
