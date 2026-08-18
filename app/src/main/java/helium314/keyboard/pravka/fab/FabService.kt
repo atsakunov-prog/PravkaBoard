@@ -71,9 +71,23 @@ class FabService : AccessibilityService() {
     private val accent = 0xFFEA580C.toInt()
     private val recRed = 0xFFD8342A.toInt()
     private val paper = 0xFFF7F3EA.toInt()
-    private val idleAlpha = 0.35f
+    private var idleAlpha = 0.35f
+    private var buttonSize = 0  // px, set in createButton from prefs
     private val tickerAlpha = 0.82f  // near-opaque, 0.6 was too see-through
     private val tickerLines = 4
+
+    /** Re-reads size/alpha prefs and applies them live (settings sliders). */
+    fun applyLook() {
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        idleAlpha = prefs.getFloat("fab_alpha", 0.35f)
+        buttonSize = dpT(prefs.getInt("fab_size", 48))
+        buttonParams?.let { p ->
+            p.width = buttonSize
+            p.height = buttonSize
+            button?.let { runCatching { windowManager.updateViewLayout(it, p) } }
+        }
+        if (!busy && !recording) button?.alpha = idleAlpha
+    }
 
     private fun apiKey(): String =
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_API, "").orEmpty()
@@ -127,7 +141,9 @@ class FabService : AccessibilityService() {
         if (button != null) return
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).toInt()
-        val size = dp(48)
+        buttonSize = dp(getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("fab_size", 48))
+        idleAlpha = getSharedPreferences(PREFS, Context.MODE_PRIVATE).getFloat("fab_alpha", 0.35f)
+        val size = buttonSize
 
         val container = FrameLayout(this)
         val bg = GradientDrawable().apply {
@@ -205,12 +221,12 @@ class FabService : AccessibilityService() {
                     v.removeCallbacks(longPress)
                     if (moved) {
                         val dm = resources.displayMetrics
-                        params.x = params.x.coerceIn(0, dm.widthPixels - size)
-                        params.y = params.y.coerceIn(0, dm.heightPixels - size)
+                        params.x = params.x.coerceIn(0, dm.widthPixels - buttonSize)
+                        params.y = params.y.coerceIn(0, dm.heightPixels - buttonSize)
                         runCatching { windowManager.updateViewLayout(container, params) }
                         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                            .putFloat("fab_x", params.x.toFloat() / (dm.widthPixels - size).coerceAtLeast(1))
-                            .putFloat("fab_y", params.y.toFloat() / (dm.heightPixels - size).coerceAtLeast(1))
+                            .putFloat("fab_x", params.x.toFloat() / (dm.widthPixels - buttonSize).coerceAtLeast(1))
+                            .putFloat("fab_y", params.y.toFloat() / (dm.heightPixels - buttonSize).coerceAtLeast(1))
                             .apply()
                     } else if (System.currentTimeMillis() - downAt < 450) onTap()
                     true
@@ -244,7 +260,7 @@ class FabService : AccessibilityService() {
     // button where recognized words crawl by, teleprompter-style ----
 
     private fun dpT(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-    private fun tickerWidth(): Int = dpT(48) * 6         // six button-diameters
+    private fun tickerWidth(): Int = (if (buttonSize > 0) buttonSize else dpT(48)) * 6  // six diameters
     private fun tickerHeight(): Int = dpT(tickerLines * 24 + 16)
 
     private var tickerParams: WindowManager.LayoutParams? = null
@@ -308,7 +324,7 @@ class FabService : AccessibilityService() {
         val bp = buttonParams ?: return
         val tp = tickerParams ?: return
         val dm = resources.displayMetrics
-        val size = dpT(48)
+        val size = if (buttonSize > 0) buttonSize else dpT(48)
         val w = tickerWidth()
         val h = tickerHeight()
         tp.y = (bp.y - (h - size) / 2).coerceIn(0, (dm.heightPixels - h).coerceAtLeast(0))
