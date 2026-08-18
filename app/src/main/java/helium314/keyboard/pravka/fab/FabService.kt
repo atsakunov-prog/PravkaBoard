@@ -97,14 +97,54 @@ class FabService : AccessibilityService() {
 
     // ---- lifecycle ----
 
+    // The overlay floats above the LOCK SCREEN too, and pocket presses were
+    // starting dictations and burning battery. Hide the button whenever the
+    // device is locked or the screen is off; back after a real unlock.
+    private fun deviceLocked(): Boolean = runCatching {
+        val km = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        km.isKeyguardLocked || !pm.isInteractive
+    }.getOrDefault(false)
+
+    private fun setButtonHiddenForLock(hidden: Boolean) {
+        button?.visibility = if (hidden) android.view.View.GONE else android.view.View.VISIBLE
+    }
+
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    // A take can't legitimately span a screen-off: the ticker
+                    // holds FLAG_KEEP_SCREEN_ON, so this is a pocket/power press.
+                    runCatching { session?.stop() }
+                    setButtonHiddenForLock(true)
+                }
+                Intent.ACTION_USER_PRESENT -> setButtonHiddenForLock(false)
+                Intent.ACTION_SCREEN_ON -> setButtonHiddenForLock(deviceLocked())
+            }
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         createButton()
+        setButtonHiddenForLock(deviceLocked())
+        runCatching {
+            registerReceiver(
+                screenReceiver,
+                android.content.IntentFilter().apply {
+                    addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_SCREEN_ON)
+                    addAction(Intent.ACTION_USER_PRESENT)
+                },
+            )
+        }
     }
 
     override fun onDestroy() {
         instance = null
+        runCatching { unregisterReceiver(screenReceiver) }
         runCatching { session?.stop() }
         button?.let { runCatching { windowManager.removeView(it) } }
         button = null
@@ -394,6 +434,8 @@ class FabService : AccessibilityService() {
     // ---- actions ----
 
     private fun onTap() {
+        // Belt and suspenders vs pocket presses: no takes while locked.
+        if (deviceLocked()) { setButtonHiddenForLock(true); return }
         val s = session
         if (s != null) { s.stop(); return }
         if (busy) { toast("Уже работаю…"); return }
