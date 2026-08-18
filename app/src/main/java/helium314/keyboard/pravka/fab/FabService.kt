@@ -413,7 +413,7 @@ class FabService : AccessibilityService() {
             this,
             biasing = helium314.keyboard.pravka.PravkaStore.biasingWords(this),
             formatting = fabPrefs.getBoolean("speech_formatting", true),
-            segmentedSession = fabPrefs.getBoolean("speech_segmented", false),
+            segmentedSession = fabPrefs.getBoolean("speech_segmented", true),
         )
         session = newSession
         showTicker()

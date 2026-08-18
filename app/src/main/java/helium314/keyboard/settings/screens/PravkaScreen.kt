@@ -238,7 +238,7 @@ fun PravkaScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     var fmt by remember { mutableStateOf(prefs.getBoolean("speech_formatting", true)) }
-                    var seg by remember { mutableStateOf(prefs.getBoolean("speech_segmented", false)) }
+                    var seg by remember { mutableStateOf(prefs.getBoolean("speech_segmented", true)) }
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         androidx.compose.material3.Switch(
                             checked = fmt,
@@ -264,11 +264,12 @@ fun PravkaScreen(
                             },
                         )
                         Spacer(Modifier.width(10.dp))
-                        Text("Непрерывная сессия (эксперимент)", style = MaterialTheme.typography.bodyMedium)
+                        Text("Непрерывная сессия", style = MaterialTheme.typography.bodyMedium)
                     }
                     HintText(
-                        "Одна сессия без перезапусков на паузах. На длинных диктовках " +
-                            "спотыкалась на редких словах и теряла хвосты — по умолчанию выключена."
+                        "Одна сессия без перезапусков: на паузах микрофон не глохнет и " +
+                            "фразы не глотаются. Если распознавание спотыкается — попробуй " +
+                            "выключить и сравнить по журналу."
                     )
                 }
 

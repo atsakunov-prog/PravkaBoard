@@ -459,7 +459,7 @@ class Pravka(private val ime: LatinIME) {
             ime,
             biasing = PravkaStore.biasingWords(ime),
             formatting = prefs().getBoolean("speech_formatting", true),
-            segmentedSession = prefs().getBoolean("speech_segmented", false),
+            segmentedSession = prefs().getBoolean("speech_segmented", true),
         )
         session = s
         pendingDirective = ""
