@@ -112,6 +112,52 @@ fun PravkaScreen(onClickBack: () -> Unit) {
                 }) {
                     Text("Открыть спец. возможности")
                 }
+                Spacer(Modifier.height(24.dp))
+                Text("Перенос из приложения Правка", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "В Правке: «Словарь → Экспорт JSON» и «Статистика → Выгрузить " +
+                        "историю (JSONL)», сохрани файлы. Потом импортируй их здесь.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(Modifier.height(8.dp))
+                val dictImport = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri == null) return@rememberLauncherForActivityResult
+                    val text = runCatching {
+                        ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    }.getOrDefault("")
+                    helium314.keyboard.pravka.PravkaStore.importDictionaryJson(ctx, text)
+                        .onSuccess { n ->
+                            android.widget.Toast.makeText(ctx, "Словарь: добавлено записей — $n", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                        .onFailure {
+                            android.widget.Toast.makeText(ctx, "Не похоже на экспорт словаря Правки", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                }
+                val historyImport = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri == null) return@rememberLauncherForActivityResult
+                    val text = runCatching {
+                        ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    }.getOrDefault("")
+                    helium314.keyboard.pravka.PravkaStore.importHistoryJsonl(ctx, text)
+                        .onSuccess { n ->
+                            android.widget.Toast.makeText(ctx, "История: перенесено записей — $n", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                        .onFailure {
+                            android.widget.Toast.makeText(ctx, "Не похоже на историю Правки (JSONL)", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                }
+                Button(onClick = { dictImport.launch(arrayOf("*/*")) }) {
+                    Text("Импорт словаря (JSON)")
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { historyImport.launch(arrayOf("*/*")) }) {
+                    Text("Импорт истории (JSONL)")
+                }
             }
         }
     }

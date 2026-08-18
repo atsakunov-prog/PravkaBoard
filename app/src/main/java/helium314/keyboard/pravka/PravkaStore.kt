@@ -166,6 +166,62 @@ object PravkaStore {
         return words.toList()
     }
 
+    // ---- migration from the standalone Pravka app ----
+
+    /**
+     * Imports a dictionary JSON exported by the Pravka app ("Экспорт JSON":
+     * a root object with an "entries" array) or this app's own bare-array
+     * format. Merges by (from, mode), existing entries win. Returns the
+     * number of NEW entries added.
+     */
+    fun importDictionaryJson(context: Context, text: String): Result<Int> = runCatching {
+        val trimmed = text.trim()
+        val array = if (trimmed.startsWith("{")) JSONObject(trimmed).getJSONArray("entries")
+            else JSONArray(trimmed)
+        val existing = dictionary(context)
+        val known = existing.map { it.from.lowercase() to it.mode }.toHashSet()
+        var nextId = (existing.maxOfOrNull { it.id } ?: 0L) + 1
+        val added = mutableListOf<DictEntry>()
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val from = o.optString("from").trim()
+            if (from.isEmpty()) continue
+            val mode = runCatching { DictMode.valueOf(o.optString("mode", "HARD")) }.getOrNull() ?: continue
+            if ((from.lowercase() to mode) in known) continue
+            added.add(
+                DictEntry(
+                    id = nextId++,
+                    from = from,
+                    to = o.optString("to").trim(),
+                    mode = mode,
+                    note = o.optString("note").trim(),
+                    enabled = o.optBoolean("enabled", true),
+                    hits = o.optInt("hits"),
+                )
+            )
+        }
+        if (added.isNotEmpty()) saveDictionary(context, existing + added)
+        added.size
+    }
+
+    /**
+     * Imports the Pravka app's history JSONL ("Выгрузить историю"). The
+     * imported lines are older than anything local, so they go FIRST and the
+     * local journal is appended after them. Returns the number of lines taken.
+     */
+    fun importHistoryJsonl(context: Context, text: String): Result<Int> = runCatching {
+        val lines = text.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .filter { line -> runCatching { JSONObject(line) }.isSuccess }
+            .toList()
+        require(lines.isNotEmpty()) { "В файле нет записей истории." }
+        val f = historyFile(context)
+        val current = if (f.exists()) f.readText() else ""
+        f.writeText(lines.joinToString("\n", postfix = "\n") + current)
+        lines.size
+    }
+
     // ---- dictionary application (ported from the Pravka app's applier) ----
 
     data class Prepared(val text: String, val dictBlock: String)
