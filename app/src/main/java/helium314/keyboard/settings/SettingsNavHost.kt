@@ -27,6 +27,8 @@ import helium314.keyboard.settings.screens.LanguageScreen
 import helium314.keyboard.settings.screens.MainSettingsScreen
 import helium314.keyboard.settings.screens.PersonalDictionariesScreen
 import helium314.keyboard.settings.screens.PersonalDictionaryScreen
+import helium314.keyboard.settings.screens.PravkaDictionaryScreen
+import helium314.keyboard.settings.screens.PravkaHistoryScreen
 import helium314.keyboard.settings.screens.PravkaScreen
 import helium314.keyboard.settings.screens.PreferencesScreen
 import helium314.keyboard.settings.screens.SecondaryLayoutScreen
@@ -84,7 +86,17 @@ fun SettingsNavHost(
             )
         }
         composable(SettingsDestination.Pravka) {
-            PravkaScreen(onClickBack = ::goBack)
+            PravkaScreen(
+                onClickBack = ::goBack,
+                onClickHistory = { navController.navigate(SettingsDestination.PravkaHistory) },
+                onClickDictionary = { navController.navigate(SettingsDestination.PravkaDictionary) },
+            )
+        }
+        composable(SettingsDestination.PravkaHistory) {
+            PravkaHistoryScreen(onClickBack = ::goBack)
+        }
+        composable(SettingsDestination.PravkaDictionary) {
+            PravkaDictionaryScreen(onClickBack = ::goBack)
         }
         composable(SettingsDestination.About) {
             AboutScreen(onClickBack = ::goBack)
@@ -153,6 +165,8 @@ object SettingsDestination {
     const val Settings = "settings"
     const val About = "about"
     const val Pravka = "pravka"
+    const val PravkaHistory = "pravka_history"
+    const val PravkaDictionary = "pravka_dictionary"
     const val TextCorrection = "text_correction"
     const val Preferences = "preferences"
     const val Toolbar = "toolbar"

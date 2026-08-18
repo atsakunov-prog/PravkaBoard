@@ -112,9 +112,29 @@ class Pravka(private val ime: LatinIME) {
                 reloadKeyboard()  // the latch key repaints as pressed/released
             }
             KeyCode.PRAVKA_NUMROW -> toggleNumbersArmed()
+            KeyCode.PRAVKA_SETTINGS -> openSettings(helium314.keyboard.settings.SettingsDestination.Pravka)
             else -> return false
         }
         return true
+    }
+
+    /** Opens the keyboard settings straight at a Pravka screen. */
+    private fun openSettings(destination: String) {
+        overlay.hide()
+        ime.requestHideSelf(0)
+        // The extra covers a cold start; navigateTo covers an already-open activity.
+        helium314.keyboard.settings.SettingsDestination.navigateTo(destination)
+        runCatching {
+            ime.startActivity(
+                Intent(ime, helium314.keyboard.settings.SettingsActivity2::class.java)
+                    .putExtra("destination", destination)
+                    .addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    )
+            )
+        }
     }
 
     // The selection anchor: fixed where the cursor stood when the latch was
@@ -268,6 +288,9 @@ class Pravka(private val ime: LatinIME) {
                 PravkaOverlay.Button("Коротко") { runAssist(PravkaPrompts.ASSIST_SUMMARY, insertResult = false) },
                 PravkaOverlay.Button("Ответить") { runAssist(PravkaPrompts.ASSIST_REPLY, insertResult = false) },
                 PravkaOverlay.Button("Перевод") { runAssist(PravkaPrompts.ASSIST_TRANSLATE, insertResult = false) },
+                PravkaOverlay.Button("История") {
+                    openSettings(helium314.keyboard.settings.SettingsDestination.PravkaHistory)
+                },
                 PravkaOverlay.Button("Закрыть") { overlay.hide() },
             ),
         )

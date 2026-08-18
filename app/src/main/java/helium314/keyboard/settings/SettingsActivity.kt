@@ -116,7 +116,11 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
                             }
                         }
                     else {
-                        SettingsNavHost(onClickBack = { this.finish() })
+                        // PravkaBoard: the toolbar's Pravka-settings key deep-links here.
+                        SettingsNavHost(
+                            onClickBack = { this.finish() },
+                            startDestination = intent?.getStringExtra("destination"),
+                        )
                         if (showWelcomeWizard) {
                             WelcomeWizard(close = { showWelcomeWizard = false }, finish = this::finish)
                         } else if (crashReports.isNotEmpty()) {

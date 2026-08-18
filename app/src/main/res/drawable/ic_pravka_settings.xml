@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PravkaBoard: the wide "П" with a small gear dot - opens Pravka settings
+     (history, dictionary, API key) from the toolbar. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:height="24dp"
+    android:width="24dp"
+    android:viewportHeight="24"
+    android:viewportWidth="24">
+    <path android:fillColor="#FFF"
+        android:pathData="M4,3h13v15h-3V6H7v12H4z"/>
+    <!-- small gear: a ring with four studs, bottom-right -->
+    <path android:fillColor="#FFF"
+        android:pathData="M18,14.6 l0.9,0 0.25,1.05 a3.4,3.4 0 0 1 0.9,0.52 l1.03,-0.33 0.45,0.78 -0.78,0.73 a3.4,3.4 0 0 1 0,1.04 l0.78,0.73 -0.45,0.78 -1.03,-0.33 a3.4,3.4 0 0 1 -0.9,0.52 L18.9,21.2 l-0.9,0 -0.25,-1.05 a3.4,3.4 0 0 1 -0.9,-0.52 l-1.03,0.33 -0.45,-0.78 0.78,-0.73 a3.4,3.4 0 0 1 0,-1.04 l-0.78,-0.73 0.45,-0.78 1.03,0.33 a3.4,3.4 0 0 1 0.9,-0.52 z M18.45,16.6 a1.3,1.3 0 1 0 0,2.6 a1.3,1.3 0 1 0 0,-2.6 z"/>
+</vector>

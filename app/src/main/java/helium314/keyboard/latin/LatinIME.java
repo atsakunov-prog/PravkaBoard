@@ -1003,6 +1003,12 @@ public class LatinIME extends InputMethodService implements
     @Override
     public void onWindowShown() {
         super.onWindowShown();
+        // PravkaBoard: the screen must not time out under an open keyboard -
+        // long dictations and reading happen without any touches. The flag only
+        // has effect while the IME window is actually visible.
+        final Window imeWindow = getWindow().getWindow();
+        if (imeWindow != null)
+            imeWindow.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (isInputViewShown()) {
             if (mInputView != null && Settings.getValues().mIsFloatingKeyboard)
                 FloatingKeyboardUtils.setFloating(mInputView);

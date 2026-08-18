@@ -102,6 +102,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     PRAVKA_POLISH -> KeyCode.PRAVKA_POLISH
     PRAVKA_SELECT -> KeyCode.PRAVKA_SELECT
     PRAVKA_NUMROW -> KeyCode.PRAVKA_NUMROW
+    PRAVKA_SETTINGS -> KeyCode.PRAVKA_SETTINGS
 }
 
 fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getCustomToolbarLongpressCode(key) ?: when (key) {
@@ -131,7 +132,8 @@ enum class ToolbarKey {
     VOICE, CLIPBOARD, NUMPAD, DPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, FLOATING, SPLIT,
     INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
     PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, BACKGROUND_GATHERING,
-    PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH, PRAVKA_SELECT, PRAVKA_NUMROW
+    PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH, PRAVKA_SELECT, PRAVKA_NUMROW,
+    PRAVKA_SETTINGS
 }
 
 enum class ToolbarMode {
@@ -145,7 +147,7 @@ val defaultToolbarPref by lazy {
     // action), the rest are plain editing keys. Mic lives beside the spacebar
     // (long press) and in the hub.
     val default = listOf(
-        SELECT_ALL, LEFT, RIGHT, COPY, PASTE, PRAVKA_CLEAN,
+        SELECT_ALL, LEFT, RIGHT, COPY, PASTE, PRAVKA_CLEAN, PRAVKA_SETTINGS,
         EMOJI, SETTINGS, CLIPBOARD, UNDO, REDO, DPAD, SPLIT,
     )
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }

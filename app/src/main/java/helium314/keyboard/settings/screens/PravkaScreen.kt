@@ -32,7 +32,11 @@ import helium314.keyboard.settings.SearchSettingsScreen
 // Pravka settings inside the keyboard: the API key and a short manual -
 // mirrors the Pravka app's settings tab.
 @Composable
-fun PravkaScreen(onClickBack: () -> Unit) {
+fun PravkaScreen(
+    onClickBack: () -> Unit,
+    onClickHistory: () -> Unit = {},
+    onClickDictionary: () -> Unit = {},
+) {
     val ctx = LocalContext.current
     val prefs = remember { ctx.getSharedPreferences("pravka", Context.MODE_PRIVATE) }
     var key by remember { mutableStateOf(prefs.getString("pravka_api_key", "").orEmpty()) }
@@ -50,6 +54,12 @@ fun PravkaScreen(onClickBack: () -> Unit) {
                     .padding(innerPadding)
                     .padding(16.dp)
             ) {
+                androidx.compose.foundation.layout.Row {
+                    Button(onClick = onClickHistory) { Text("История") }
+                    Spacer(Modifier.padding(horizontal = 6.dp))
+                    Button(onClick = onClickDictionary) { Text("Словарь") }
+                }
+                Spacer(Modifier.height(24.dp))
                 Text("API-ключ Anthropic", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(

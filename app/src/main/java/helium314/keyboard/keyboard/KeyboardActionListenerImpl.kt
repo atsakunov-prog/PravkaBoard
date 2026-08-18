@@ -112,7 +112,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         when (primaryCode) {
             KeyCode.PRAVKA_CLEAN, KeyCode.PRAVKA_VOICE, KeyCode.PRAVKA_SHORTER,
             KeyCode.PRAVKA_LONGER, KeyCode.PRAVKA_POLISH, KeyCode.PRAVKA_SET_KEY,
-            KeyCode.PRAVKA_SELECT, KeyCode.PRAVKA_NUMROW -> {
+            KeyCode.PRAVKA_SELECT, KeyCode.PRAVKA_NUMROW, KeyCode.PRAVKA_SETTINGS -> {
                 // Toolbar presses open the panel hub; keyboard keys act immediately.
                 helium314.keyboard.pravka.Pravka.get(latinIME)
                     .onToolbarKey(primaryCode, x == Constants.SUGGESTION_STRIP_COORDINATE)

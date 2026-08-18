@@ -160,6 +160,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.PRAVKA_CLEAN -> R.drawable.ic_pravka
                     ToolbarKey.PRAVKA_VOICE -> R.drawable.sym_keyboard_voice_holo
                     ToolbarKey.PRAVKA_NUMROW -> R.drawable.sym_keyboard_numpad_key_holo
+                    ToolbarKey.PRAVKA_SETTINGS -> R.drawable.ic_pravka_settings
                     ToolbarKey.PRAVKA_SHORTER -> R.drawable.ic_pravka_shorter
                     ToolbarKey.PRAVKA_LONGER -> R.drawable.ic_pravka_longer
                     ToolbarKey.PRAVKA_POLISH -> R.drawable.ic_pravka_polish
@@ -231,6 +232,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.PRAVKA_CLEAN -> R.drawable.ic_pravka
                     ToolbarKey.PRAVKA_VOICE -> R.drawable.sym_keyboard_voice_lxx
                     ToolbarKey.PRAVKA_NUMROW -> R.drawable.sym_keyboard_numpad_key_lxx
+                    ToolbarKey.PRAVKA_SETTINGS -> R.drawable.ic_pravka_settings
                     ToolbarKey.PRAVKA_SHORTER -> R.drawable.ic_pravka_shorter
                     ToolbarKey.PRAVKA_LONGER -> R.drawable.ic_pravka_longer
                     ToolbarKey.PRAVKA_POLISH -> R.drawable.ic_pravka_polish
@@ -302,6 +304,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.PRAVKA_CLEAN -> R.drawable.ic_pravka
                     ToolbarKey.PRAVKA_VOICE -> R.drawable.sym_keyboard_voice_rounded
                     ToolbarKey.PRAVKA_NUMROW -> R.drawable.sym_keyboard_numpad_key_lxx
+                    ToolbarKey.PRAVKA_SETTINGS -> R.drawable.ic_pravka_settings
                     ToolbarKey.PRAVKA_SHORTER -> R.drawable.ic_pravka_shorter
                     ToolbarKey.PRAVKA_LONGER -> R.drawable.ic_pravka_longer
                     ToolbarKey.PRAVKA_POLISH -> R.drawable.ic_pravka_polish

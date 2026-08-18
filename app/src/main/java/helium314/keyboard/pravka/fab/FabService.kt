@@ -6,7 +6,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
@@ -53,12 +52,28 @@ class FabService : AccessibilityService() {
 
     private val windowManager by lazy { getSystemService(WindowManager::class.java) }
     private var button: FrameLayout? = null
+    private var buttonBg: GradientDrawable? = null
+    private var glyph: android.widget.ImageView? = null
+    private var recDot: android.view.View? = null
+    private var progress: android.widget.ProgressBar? = null
     private var buttonParams: WindowManager.LayoutParams? = null
-    private var ticker: TextView? = null
+    private var ticker: FrameLayout? = null
+    private var tickerText: TextView? = null
+    private var tickerVisible = false
     private var busy = false
+    private var recording = false
     private var session: GoogleSpeechSession? = null
     private var cachedFocus: WeakReference<AccessibilityNodeInfo>? = null
     private var dictationTarget: WeakReference<AccessibilityNodeInfo>? = null
+
+    // Editorial palette shared with the Pravka app's button and launcher icon:
+    // orange circle, paper-white wide "П"; deep red while recording.
+    private val accent = 0xFFEA580C.toInt()
+    private val recRed = 0xFFD8342A.toInt()
+    private val paper = 0xFFF7F3EA.toInt()
+    private val idleAlpha = 0.35f
+    private val tickerAlpha = 0.82f  // near-opaque, 0.6 was too see-through
+    private val tickerLines = 4
 
     private fun apiKey(): String =
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_API, "").orEmpty()
@@ -115,22 +130,37 @@ class FabService : AccessibilityService() {
         val size = dp(48)
 
         val container = FrameLayout(this)
-        container.background = GradientDrawable().apply {
+        val bg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(0xFFEA580C.toInt())
+            setColor(accent)
         }
-        container.alpha = 0.4f
+        buttonBg = bg
+        container.background = bg
+        container.elevation = dp(4).toFloat()
+        container.alpha = idleAlpha
+        glyph = android.widget.ImageView(this).apply {
+            setImageResource(helium314.keyboard.latin.R.drawable.ic_pravka_fab_glyph)
+        }
         container.addView(
-            TextView(this).apply {
-                text = "П"
-                setTextColor(0xFFF7F3EA.toInt())
-                textSize = 20f
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-            },
+            glyph,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
         )
+        // White square "stop" glyph, shown only while recording.
+        recDot = android.view.View(this).apply {
+            visibility = android.view.View.GONE
+            background = GradientDrawable().apply {
+                setColor(paper)
+                cornerRadius = dp(3).toFloat()
+            }
+        }
+        container.addView(recDot, FrameLayout.LayoutParams(dp(16), dp(16), Gravity.CENTER))
+        progress = android.widget.ProgressBar(this).apply {
+            visibility = android.view.View.GONE
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(paper)
+        }
+        container.addView(progress, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER))
 
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val params = WindowManager.LayoutParams(
             size, size,
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -139,8 +169,11 @@ class FabService : AccessibilityService() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val dm = resources.displayMetrics
-            x = (dm.widthPixels * 0.92f).toInt() - size
-            y = (dm.heightPixels * 0.45f).toInt()
+            // Free positioning, remembered where the owner last dropped it.
+            val xf = prefs.getFloat("fab_x", 0.97f)
+            val yf = prefs.getFloat("fab_y", 0.45f)
+            x = ((dm.widthPixels - size) * xf).toInt()
+            y = ((dm.heightPixels - size) * yf).toInt()
         }
 
         // Drag + tap + long-press, self-contained.
@@ -164,12 +197,22 @@ class FabService : AccessibilityService() {
                         params.x = (startX + dx).toInt()
                         params.y = (startY + dy).toInt()
                         runCatching { windowManager.updateViewLayout(container, params) }
+                        repositionTicker()  // the pill rides along
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     v.removeCallbacks(longPress)
-                    if (!moved && System.currentTimeMillis() - downAt < 450) onTap()
+                    if (moved) {
+                        val dm = resources.displayMetrics
+                        params.x = params.x.coerceIn(0, dm.widthPixels - size)
+                        params.y = params.y.coerceIn(0, dm.heightPixels - size)
+                        runCatching { windowManager.updateViewLayout(container, params) }
+                        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                            .putFloat("fab_x", params.x.toFloat() / (dm.widthPixels - size).coerceAtLeast(1))
+                            .putFloat("fab_y", params.y.toFloat() / (dm.heightPixels - size).coerceAtLeast(1))
+                            .apply()
+                    } else if (System.currentTimeMillis() - downAt < 450) onTap()
                     true
                 }
                 else -> { v.removeCallbacks(longPress); true }
@@ -181,51 +224,137 @@ class FabService : AccessibilityService() {
         runCatching { windowManager.addView(container, params) }
     }
 
+    /** Busy (API round trip): white spinner in the circle. */
     private fun setBusyLook(value: Boolean) {
-        button?.alpha = if (value) 1f else 0.4f
+        glyph?.visibility = if (value || recording) android.view.View.GONE else android.view.View.VISIBLE
+        progress?.visibility = if (value) android.view.View.VISIBLE else android.view.View.GONE
+        button?.alpha = if (value || recording) 1f else idleAlpha
     }
 
-    // ---- ticker pill next to the button ----
+    /** Recording: deep red circle with a white stop square, full opacity. */
+    private fun setRecording(value: Boolean) {
+        recording = value
+        buttonBg?.setColor(if (value) recRed else accent)
+        recDot?.visibility = if (value) android.view.View.VISIBLE else android.view.View.GONE
+        glyph?.visibility = if (value || busy) android.view.View.GONE else android.view.View.VISIBLE
+        button?.alpha = if (value || busy) 1f else idleAlpha
+    }
+
+    // ---- Live-dictation ticker (telegraph): an orange pill beside the
+    // button where recognized words crawl by, teleprompter-style ----
+
+    private fun dpT(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+    private fun tickerWidth(): Int = dpT(48) * 6         // six button-diameters
+    private fun tickerHeight(): Int = dpT(tickerLines * 24 + 16)
+
+    private var tickerParams: WindowManager.LayoutParams? = null
+    private var lastTickerText = ""
+    private var lastTickerAt = 0L
 
     private fun showTicker() {
-        if (ticker != null) { ticker?.text = ""; return }
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
-        val bp = buttonParams ?: return
-        val tv = TextView(this).apply {
-            setTextColor(0xFFF7F3EA.toInt())
-            textSize = 15f
-            maxLines = 4
-            gravity = Gravity.BOTTOM or Gravity.START
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(16).toFloat()
-                setColor(0xF5241F19.toInt())
-            }
+        if (ticker == null) createTicker()
+        repositionTicker()
+        val t = ticker ?: return
+        tickerText?.text = ""
+        lastTickerText = ""
+        lastTickerAt = 0L
+        // Long takes happen without touches - don't let the screen sleep while
+        // the ticker (dictation / streaming fix) is up. Cleared on hide.
+        tickerParams?.flags = (tickerParams?.flags ?: 0) or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        runCatching { windowManager.updateViewLayout(t, tickerParams) }
+        if (!tickerVisible) {
+            tickerVisible = true
+            t.visibility = android.view.View.VISIBLE
+            t.alpha = 0f
+            t.animate().alpha(tickerAlpha).setDuration(180).start()
         }
-        val dm = resources.displayMetrics
-        val w = (dm.widthPixels * 0.6f).toInt()
-        val params = WindowManager.LayoutParams(
-            w, dp(110),
+    }
+
+    private fun createTicker() {
+        val pill = FrameLayout(this)
+        pill.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpT(24).toFloat()
+            setColor(accent)
+        }
+        pill.elevation = dpT(4).toFloat()
+        val tv = TextView(this).apply {
+            setTextColor(paper)
+            textSize = 17f
+            maxLines = tickerLines
+            gravity = Gravity.BOTTOM or Gravity.START
+            setPadding(dpT(16), dpT(8), dpT(16), dpT(8))
+            setLineSpacing(0f, 1.05f)
+        }
+        tickerText = tv
+        pill.addView(
+            tv,
+            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
+        )
+        val p = WindowManager.LayoutParams(
+            tickerWidth(), tickerHeight(),
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = if (bp.x > dm.widthPixels / 2) (bp.x - w - dp(8)).coerceAtLeast(0) else bp.x + dp(56)
-            y = bp.y.coerceIn(0, (dm.heightPixels - dp(120)).coerceAtLeast(0))
-        }
-        ticker = tv
-        runCatching { windowManager.addView(tv, params) }
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+        tickerParams = p
+        ticker = pill
+        runCatching { windowManager.addView(pill, p) }
+        pill.visibility = android.view.View.GONE
+    }
+
+    /** Beside the button, on the side with room; vertically centred on it. */
+    private fun repositionTicker() {
+        val bp = buttonParams ?: return
+        val tp = tickerParams ?: return
+        val dm = resources.displayMetrics
+        val size = dpT(48)
+        val w = tickerWidth()
+        val h = tickerHeight()
+        tp.y = (bp.y - (h - size) / 2).coerceIn(0, (dm.heightPixels - h).coerceAtLeast(0))
+        tp.x = if (bp.x + size / 2 < dm.widthPixels / 2) bp.x + size + dpT(8) else bp.x - w - dpT(8)
+        tp.x = tp.x.coerceIn(0, (dm.widthPixels - w).coerceAtLeast(0))
+        if (tickerVisible) ticker?.let { runCatching { windowManager.updateViewLayout(it, tp) } }
     }
 
     private fun updateTicker(text: String) {
-        ticker?.text = text.takeLast(400)
+        val tv = tickerText ?: return
+        // Partials arrive several times a second; cap the refresh rate and skip
+        // identical text so the overlay doesn't compete with recognition.
+        val tail = text.takeLast(400)
+        if (tail == lastTickerText) return
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastTickerAt < 120) return
+        lastTickerAt = now
+        lastTickerText = tail
+        tv.text = tail
+        // ellipsize=START is ignored on multi-line TextViews: trim leading lines
+        // after layout so the newest words are what stays visible.
+        tv.post {
+            val layout = tv.layout ?: return@post
+            if (layout.lineCount > tickerLines) {
+                val cut = layout.getLineStart(layout.lineCount - tickerLines)
+                val current = tv.text?.toString() ?: return@post
+                if (cut in 1 until current.length) tv.text = current.substring(cut)
+            }
+        }
     }
 
     private fun hideTicker() {
-        ticker?.let { runCatching { windowManager.removeView(it) } }
-        ticker = null
+        val t = ticker ?: return
+        if (!tickerVisible) return
+        tickerVisible = false
+        t.animate().alpha(0f).setDuration(220).withEndAction {
+            // A hide -> immediate re-show (dictation ends, CLEAN streaming
+            // starts) cancels this fade; don't hide what just came back.
+            if (!tickerVisible) {
+                t.visibility = android.view.View.GONE
+                tickerParams?.let { p ->
+                    p.flags = p.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
+                    runCatching { windowManager.updateViewLayout(t, p) }
+                }
+            }
+        }.start()
     }
 
     // ---- haptics (API-21-safe) ----
@@ -267,7 +396,7 @@ class FabService : AccessibilityService() {
         session = newSession
         showTicker()
         updateTicker("Говори…")
-        setBusyLook(true)
+        setRecording(true)
         newSession.start(
             onReady = { hapticStart() },
             onPartial = { live -> updateTicker(live) },
@@ -276,7 +405,7 @@ class FabService : AccessibilityService() {
             onError = { msg ->
                 session = null
                 hideTicker()
-                setBusyLook(false)
+                setRecording(false)
                 hapticError()
                 toast(msg)
             },
@@ -290,11 +419,13 @@ class FabService : AccessibilityService() {
 
     private fun onDictationDone(rawText: String) {
         session = null
+        setRecording(false)
         val text = VoiceCommands.apply(rawText)
         if (text.isBlank()) {
             hideTicker(); setBusyLook(false); hapticError(); toast("Ничего не расслышал")
             return
         }
+        setBusyLook(true)
         scope.launch {
             val node = dictationTarget?.get()?.takeIf { runCatching { it.refresh() && it.isEditable }.getOrDefault(false) }
                 ?: focusedEditableNode()
