@@ -62,17 +62,28 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         }
         val baseKeys = LayoutParser.parseLayout(layoutType, params, context)
         val keysInRows = createRows(baseKeys)
-        // PravkaBoard: on the folded (outer) screen add a nav row under the
-        // bottom row - select-all and the selection latch on the left, arrows
-        // in the middle, copy/paste on the right (owner's request).
-        if (helium314.keyboard.latin.utils.FoldableUtils.isFolded && params.mId.element.isAlphaOrSymbol) {
-            val navLabels = listOf("select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
+        // PravkaBoard: a nav row under the bottom row (owner's request).
+        // Folded (outer screen): select-all + selection latch | arrows | copy, paste.
+        // Unfolded: a PC-style arrow cluster on the right, selection latch beside it.
+        if (params.mId.element.isAlphaOrSymbol) {
+            val folded = helium314.keyboard.latin.utils.FoldableUtils.isFolded
             val navRow = ArrayList<KeyParams>()
-            navLabels.forEach { label ->
-                navRow.add(
-                    TextKeyData(label = label, width = 1f / navLabels.size, type = KeyType.FUNCTION)
-                        .toKeyParams(params, defaultLabelFlags)
-                )
+            if (folded) {
+                val labels = listOf("select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
+                labels.forEach { label ->
+                    navRow.add(
+                        TextKeyData(label = label, width = 1f / labels.size, type = KeyType.FUNCTION)
+                            .toKeyParams(params, defaultLabelFlags)
+                    )
+                }
+            } else {
+                navRow.add(KeyParams.newSpacer(params, 0.5f))
+                listOf("pravka_select", "left", "up", "down", "right").forEach { label ->
+                    navRow.add(
+                        TextKeyData(label = label, width = 0.1f, type = KeyType.FUNCTION)
+                            .toKeyParams(params, defaultLabelFlags)
+                    )
+                }
             }
             keysInRows.add(navRow)
         }
