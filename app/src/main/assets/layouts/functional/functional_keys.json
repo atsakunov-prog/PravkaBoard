@@ -15,7 +15,7 @@
     { "$": "keyboard_state_selector", "emojiKeyEnabled": { "$": "keyboard_state_selector", "alphabet": { "label": "emoji" }}},
     { "$": "keyboard_state_selector", "symbols": { "label": "numpad" } },
     { "label": "space" },
-    { "$": "keyboard_state_selector", "alphabet": { "label": "pravka_voice" } },
+    { "$": "keyboard_state_selector", "alphabet": { "label": "!icon/pravka_voice|!code/-10008", "popup": { "main": { "label": "pravka_voice" } } } },
     { "$": "keyboard_state_selector",
       "symbols": { "label": "dpad" },
       "dpad": { "label": "symbol" }

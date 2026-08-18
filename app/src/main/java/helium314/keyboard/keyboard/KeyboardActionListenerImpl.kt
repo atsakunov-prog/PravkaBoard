@@ -107,7 +107,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
         when (primaryCode) {
             KeyCode.PRAVKA_CLEAN, KeyCode.PRAVKA_VOICE, KeyCode.PRAVKA_SHORTER,
             KeyCode.PRAVKA_LONGER, KeyCode.PRAVKA_POLISH, KeyCode.PRAVKA_SET_KEY,
-            KeyCode.PRAVKA_SELECT -> {
+            KeyCode.PRAVKA_SELECT, KeyCode.PRAVKA_NUMROW -> {
                 // Toolbar presses open the panel hub; keyboard keys act immediately.
                 helium314.keyboard.pravka.Pravka.get(latinIME)
                     .onToolbarKey(primaryCode, x == Constants.SUGGESTION_STRIP_COORDINATE)
@@ -116,8 +116,7 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
             // Selection latch: arrows extend the selection instead of moving the cursor.
             KeyCode.ARROW_LEFT, KeyCode.ARROW_RIGHT, KeyCode.ARROW_UP, KeyCode.ARROW_DOWN -> {
                 if (helium314.keyboard.pravka.Pravka.selectionLatch) {
-                    helium314.keyboard.pravka.Pravka.get(latinIME)
-                        .sendShiftArrow(KeyCode.keyCodeToKeyEventCode(primaryCode))
+                    helium314.keyboard.pravka.Pravka.get(latinIME).onSelectionArrow(primaryCode)
                     return
                 }
             }

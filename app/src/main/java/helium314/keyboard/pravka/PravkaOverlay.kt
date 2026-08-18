@@ -78,7 +78,7 @@ class PravkaOverlay {
             setOnClickListener { onTextTap?.invoke() }
         }
         val btnRow = LinearLayout(parent.context).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             val pad = dp(parent, 8)
             // The owner found the buttons glued to the very bottom edge -
@@ -107,15 +107,32 @@ class PravkaOverlay {
     }
 
     fun setButtons(buttons: List<Button>) {
-        val row = buttonRow ?: return
-        val parent = row.parent as? ViewGroup ?: return
-        row.removeAllViews()
-        buttons.forEach { b ->
-            val lp = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { marginStart = dp(parent, 5); marginEnd = dp(parent, 5) }
-            row.addView(pill(parent, b), lp)
+        val area = buttonRow ?: return
+        val parent = area.parent as? ViewGroup ?: return
+        area.removeAllViews()
+        // Wrap into centered rows so a big hub stays reachable by thumb.
+        buttons.chunked(4).forEach { chunk ->
+            val row = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            chunk.forEach { b ->
+                val lp = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply {
+                    marginStart = dp(parent, 5); marginEnd = dp(parent, 5)
+                    topMargin = dp(parent, 4); bottomMargin = dp(parent, 4)
+                }
+                row.addView(pill(parent, b), lp)
+            }
+            area.addView(
+                row,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
         }
     }
 

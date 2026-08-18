@@ -10,6 +10,7 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.widget.Toast
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode
 import helium314.keyboard.latin.LatinIME
+import helium314.keyboard.latin.utils.prefs
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -84,22 +85,82 @@ class Pravka(private val ime: LatinIME) {
             KeyCode.PRAVKA_SET_KEY -> setApiKeyFromClipboard()
             KeyCode.PRAVKA_SELECT -> {
                 selectionLatch = !selectionLatch
+                selAnchor = -1
                 toast(if (selectionLatch) "Выделение стрелками: ВКЛ" else "Выделение стрелками: выкл")
             }
+            KeyCode.PRAVKA_NUMROW -> showNumberRowFor5s()
             else -> return false
         }
         return true
     }
 
+    // The selection anchor: fixed where the cursor stood when the latch was
+    // switched on; arrows move the OTHER end. Direct setSelection is used
+    // instead of shift+arrow key events - editors handle it uniformly.
+    private var selAnchor = -1
+
     /** Arrow key while the selection latch is on: extend the selection. */
-    fun sendShiftArrow(keyEventCode: Int) {
+    fun onSelectionArrow(code: Int) {
         val ic = ime.currentInputConnection ?: return
-        val now = android.os.SystemClock.uptimeMillis()
-        val meta = android.view.KeyEvent.META_SHIFT_ON or android.view.KeyEvent.META_SHIFT_LEFT_ON
         runCatching {
-            ic.sendKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, keyEventCode, 0, meta))
-            ic.sendKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP, keyEventCode, 0, meta))
+            val et = ic.getExtractedText(ExtractedTextRequest(), 0) ?: return
+            val text = et.text?.toString() ?: return
+            val off = et.startOffset
+            val selStart = off + et.selectionStart
+            val selEnd = off + et.selectionEnd
+            if (selAnchor < 0) selAnchor = selStart
+            val moving = if (selStart == selAnchor) selEnd else selStart
+            val next = when (code) {
+                KeyCode.ARROW_LEFT -> (moving - 1).coerceAtLeast(0)
+                KeyCode.ARROW_RIGHT -> (moving + 1).coerceAtMost(off + text.length)
+                KeyCode.ARROW_UP -> lineMove(text, moving - off, -1) + off
+                KeyCode.ARROW_DOWN -> lineMove(text, moving - off, +1) + off
+                else -> moving
+            }
+            ic.setSelection(minOf(selAnchor, next), maxOf(selAnchor, next))
         }
+    }
+
+    /** Cursor position one line up/down, keeping the column where possible. */
+    private fun lineMove(text: String, pos: Int, dir: Int): Int {
+        val p = pos.coerceIn(0, text.length)
+        val lineStart = text.lastIndexOf('\n', p - 1) + 1
+        val column = p - lineStart
+        return if (dir < 0) {
+            if (lineStart == 0) 0 else {
+                val prevStart = text.lastIndexOf('\n', lineStart - 2) + 1
+                (prevStart + column).coerceAtMost(lineStart - 1)
+            }
+        } else {
+            val lineEnd = text.indexOf('\n', p).let { if (it < 0) text.length else it }
+            if (lineEnd >= text.length) text.length else {
+                val nextStart = lineEnd + 1
+                val nextEnd = text.indexOf('\n', nextStart).let { if (it < 0) text.length else it }
+                (nextStart + column).coerceAtMost(nextEnd)
+            }
+        }
+    }
+
+    // ---- 5-second number row (the "123" key in the nav row) ----
+
+    private var numRowTimer: Runnable? = null
+
+    private fun showNumberRowFor5s() {
+        val prefs = ime.prefs()
+        prefs.edit().putBoolean(
+            helium314.keyboard.latin.settings.Settings.PREF_SHOW_NUMBER_ROW, true
+        ).apply()
+        helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().setThemeNeedsReload()
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        numRowTimer?.let { handler.removeCallbacks(it) }
+        val off = Runnable {
+            prefs.edit().putBoolean(
+                helium314.keyboard.latin.settings.Settings.PREF_SHOW_NUMBER_ROW, false
+            ).apply()
+            helium314.keyboard.keyboard.KeyboardSwitcher.getInstance().setThemeNeedsReload()
+        }
+        numRowTimer = off
+        handler.postDelayed(off, 5000)
     }
 
     // ---- API key: copy the key, long-press the Pravka toolbar key ----
@@ -125,23 +186,92 @@ class Pravka(private val ime: LatinIME) {
         return extracted?.text?.toString().orEmpty()
     }
 
-    /** The "П" hub: the panel shows the field text and every rework action. */
+    private fun clipboardText(): String = runCatching {
+        val cm = ime.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+    }.getOrDefault("")
+
+    /** Field text if any, else the clipboard - what assist actions work on. */
+    private fun assistSource(): Pair<String, String>? {
+        fieldText().takeIf { it.isNotBlank() }?.let { return it to "поле" }
+        clipboardText().takeIf { it.isNotBlank() }?.let { return it to "буфер" }
+        return null
+    }
+
+    /** The "П" hub: the panel shows the field text and EVERY action. */
     private fun showFixHub() {
         if (busy) { toast("Уже работаю…"); return }
         if (session != null) { stopDictation(); return }
         if (overlay.isShowing) { overlay.hide(); return }  // second tap closes
         val text = fieldText()
-        if (text.isBlank()) { toast("Поле пустое — нечего править."); return }
+        val preview = if (text.isBlank()) "Поле пустое. Диктовка и действия с буфером доступны."
+            else text.takeLast(600)
         overlay.show(
-            text.takeLast(600),
+            preview,
             listOf(
-                PravkaOverlay.Button("Отмена") { overlay.hide() },
                 PravkaOverlay.Button("Почистить", big = true) { cleanField("", strong = false) },
                 PravkaOverlay.Button("Причесать") { cleanField(PravkaPrompts.REDO_POLISH, strong = true) },
                 PravkaOverlay.Button("Короче") { cleanField(PravkaPrompts.REDO_SHORTER, strong = true) },
                 PravkaOverlay.Button("Длиннее") { cleanField(PravkaPrompts.REDO_LONGER, strong = true) },
+                PravkaOverlay.Button("Диктовка") { overlay.hide(); toggleDictation() },
+                PravkaOverlay.Button("Отменить") {
+                    overlay.hide()
+                    ime.onCodeInput(KeyCode.UNDO, helium314.keyboard.latin.common.Constants.SUGGESTION_STRIP_COORDINATE,
+                        helium314.keyboard.latin.common.Constants.SUGGESTION_STRIP_COORDINATE, false)
+                },
+                PravkaOverlay.Button("Коротко") { runAssist(PravkaPrompts.ASSIST_SUMMARY, insertResult = false) },
+                PravkaOverlay.Button("Ответить") { runAssist(PravkaPrompts.ASSIST_REPLY, insertResult = false) },
+                PravkaOverlay.Button("Перевод") { runAssist(PravkaPrompts.ASSIST_TRANSLATE, insertResult = false) },
+                PravkaOverlay.Button("Закрыть") { overlay.hide() },
             ),
         )
+    }
+
+    // ---- assist actions: summarize / reply / translate (field or clipboard) ----
+
+    private fun runAssist(instruction: String, insertResult: Boolean) {
+        if (busy) { toast("Уже работаю…"); return }
+        val source = assistSource() ?: run { toast("Нет текста ни в поле, ни в буфере."); return }
+        val (content, from) = source
+        val key = apiKey()
+        if (key.isBlank()) { toast("Нет API-ключа: Настройки клавиатуры → Правка."); return }
+        busy = true
+        overlay.show("… (текст из: $from)", buttons = emptyList())
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                PravkaApi.assist(
+                    apiKey = key,
+                    instruction = instruction,
+                    content = content,
+                    onDelta = { partial -> scope.launch { overlay.update(partial.takeLast(1500)) } },
+                )
+            }
+            busy = false
+            result.onSuccess { fix ->
+                PravkaStore.appendHistory(ime, "assist", fix, content.take(2000), fix.text, true, null)
+                copyToClipboard(fix.text)
+                if (insertResult) {
+                    overlay.hide()
+                    insertAtCursor(fix.text)
+                } else {
+                    // Result stays on the panel for reading; insert on demand.
+                    overlay.show(
+                        fix.text,
+                        listOf(
+                            PravkaOverlay.Button("Вставить", big = true) {
+                                overlay.hide()
+                                insertAtCursor(fix.text)
+                            },
+                            PravkaOverlay.Button("Скопировано ✓") { },
+                            PravkaOverlay.Button("Закрыть") { overlay.hide() },
+                        ),
+                    )
+                }
+            }.onFailure { e ->
+                overlay.hide()
+                toast(e.message ?: "Ошибка")
+            }
+        }
     }
 
     private fun cleanField(directive: String, strong: Boolean) {

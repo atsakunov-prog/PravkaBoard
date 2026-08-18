@@ -101,6 +101,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     PRAVKA_LONGER -> KeyCode.PRAVKA_LONGER
     PRAVKA_POLISH -> KeyCode.PRAVKA_POLISH
     PRAVKA_SELECT -> KeyCode.PRAVKA_SELECT
+    PRAVKA_NUMROW -> KeyCode.PRAVKA_NUMROW
 }
 
 fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getCustomToolbarLongpressCode(key) ?: when (key) {
@@ -130,7 +131,7 @@ enum class ToolbarKey {
     VOICE, CLIPBOARD, NUMPAD, DPAD, UNDO, REDO, SETTINGS, SELECT_ALL, SELECT_WORD, COPY, CUT, PASTE, ONE_HANDED, FLOATING, SPLIT,
     INCOGNITO, AUTOCORRECT, CLEAR_CLIPBOARD, CLOSE_HISTORY, EMOJI, LEFT, RIGHT, UP, DOWN, WORD_LEFT, WORD_RIGHT,
     PAGE_UP, PAGE_DOWN, FULL_LEFT, FULL_RIGHT, PAGE_START, PAGE_END, BACKGROUND_GATHERING,
-    PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH, PRAVKA_SELECT
+    PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH, PRAVKA_SELECT, PRAVKA_NUMROW
 }
 
 enum class ToolbarMode {
@@ -140,11 +141,12 @@ enum class ToolbarMode {
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
 val defaultToolbarPref by lazy {
-    // PravkaBoard: factory default = the owner's exported toolbar (backup #3),
-    // plus EMOJI - the owner moved the emoji key off the bottom row into here.
+    // PravkaBoard: decluttered - ONE Pravka key ("П" opens the hub with every
+    // action), the rest are plain editing keys. Mic lives beside the spacebar
+    // (long press) and in the hub.
     val default = listOf(
-        SELECT_ALL, LEFT, RIGHT, COPY, PASTE, PRAVKA_VOICE, PRAVKA_POLISH, PRAVKA_CLEAN,
-        EMOJI, SETTINGS, CLIPBOARD, UNDO, REDO, DPAD, SPLIT, PRAVKA_SHORTER, PRAVKA_LONGER,
+        SELECT_ALL, LEFT, RIGHT, COPY, PASTE, PRAVKA_CLEAN,
+        EMOJI, SETTINGS, CLIPBOARD, UNDO, REDO, DPAD, SPLIT,
     )
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }
     default.joinToString(Separators.ENTRY) { it.name + Separators.KV + true } + Separators.ENTRY +

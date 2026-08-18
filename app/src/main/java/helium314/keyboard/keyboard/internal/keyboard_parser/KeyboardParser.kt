@@ -66,7 +66,7 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         // the number row), identical in folded and unfolded states:
         // select-all + selection latch | arrows | copy, paste (owner's request).
         if (params.mId.element.isAlphaOrSymbol) {
-            val labels = listOf("select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
+            val labels = listOf("pravka_numrow", "select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
             val navRow = ArrayList<KeyParams>()
             labels.forEach { label ->
                 navRow.add(

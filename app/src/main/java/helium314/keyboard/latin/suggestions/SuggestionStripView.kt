@@ -196,9 +196,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                     return true
                 }
 
-                // PravkaBoard: the toolbar row is always visible and must not
-                // block the swipe-up more-suggestions panel.
-                return if (!isExternalSuggestionVisible && deltaY > 0 && dy < (-10).dpToPx(resources)) showMoreSuggestions()
+                return if (!isExternalSuggestionVisible && toolbarContainer.visibility != VISIBLE && deltaY > 0 && dy < (-10).dpToPx(resources)) showMoreSuggestions()
                 else false
             }
         }
@@ -230,17 +228,17 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     }
 
     fun setToolbarVisibility(toolbarVisible: Boolean) {
-        // PravkaBoard: the toolbar is a permanent second row and the
-        // suggestions row is always visible - there is nothing to toggle.
-        pinnedKeys.isVisible = true
-        suggestionsStrip.isVisible = true
-        toolbarContainer.isVisible = true
+        pinnedKeys.isVisible = !toolbarVisible
+        suggestionsStrip.isVisible = !toolbarVisible
+        toolbarContainer.isVisible = toolbarVisible
 
         if (DEBUG_SUGGESTIONS) {
             for (view in debugInfoViews) {
                 view.visibility = suggestionsStrip.visibility
             }
         }
+
+        toolbarExpandKey.scaleX = (if (toolbarVisible) -1f else 1f) * direction
     }
 
     fun setSuggestions(suggestions: SuggestedWords, isRtlLanguage: Boolean) {

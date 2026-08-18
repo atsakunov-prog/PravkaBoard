@@ -62,6 +62,33 @@ object PravkaApi {
         dictBlock: String = "",
     ): Result<String> = proofreadFull(apiKey, input, directive, contextBefore, model, onDelta, dictBlock).map { it.text }
 
+    /**
+     * Free-form assist task (summarize / reply / translate): [instruction]
+     * plus the [content] in tags, NO CLEAN template. Blocking, IO thread.
+     */
+    fun assist(
+        apiKey: String,
+        instruction: String,
+        content: String,
+        model: String = MODEL_SONNET,
+        onDelta: ((String) -> Unit)? = null,
+    ): Result<FixResult> = runCatching {
+        if (apiKey.isBlank()) throw ApiException("Не задан API-ключ: Настройки клавиатуры → Правка.")
+        val prompt = instruction.trim() + "\n\n<текст>\n" + content + "\n</текст>"
+        val parts = PravkaPrompts.PromptParts(stablePrefix = "", dictPart = prompt, afterInput = "")
+        val started = System.currentTimeMillis()
+        val r = try {
+            request(apiKey, model, parts, "", onDelta)
+        } catch (e: IOException) {
+            request(apiKey, model, parts, "", onDelta)
+        } catch (e: ApiException) {
+            if (!e.retryable) throw e
+            Thread.sleep(1500)
+            request(apiKey, model, parts, "", onDelta)
+        }
+        r.copy(model = model, latencyMs = System.currentTimeMillis() - started)
+    }
+
     /** Like [proofread], but returns the full accounting for the journal. */
     fun proofreadFull(
         apiKey: String,
@@ -94,7 +121,8 @@ object PravkaApi {
         input: String,
         onDelta: ((String) -> Unit)?,
     ): FixResult {
-        val estimatedInputTokens = input.length / 2 + 1
+        // Count the variable slot too: assist tasks carry their content there.
+        val estimatedInputTokens = (input.length + parts.dictPart.length) / 2 + 1
         // Opus thinks adaptively and thinking tokens count toward max_tokens.
         val thinkingHeadroom = if (model == MODEL_SONNET) 0 else 8000
         val maxTokens = (estimatedInputTokens * 13 / 10 + 300 + thinkingHeadroom)
@@ -115,7 +143,9 @@ object PravkaApi {
                         put(
                             "content",
                             JSONArray().apply {
-                                put(
+                                // Assist tasks have no stable prefix - an empty
+                                // text block would be rejected by the API.
+                                if (parts.stablePrefix.isNotBlank()) put(
                                     JSONObject().apply {
                                         put("type", "text")
                                         put("text", parts.stablePrefix)

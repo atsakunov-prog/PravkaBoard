@@ -349,6 +349,7 @@
     <string name="pravka_longer">Pravka: longer</string>
     <string name="pravka_polish">Pravka: polish style</string>
     <string name="pravka_select">Pravka: selection latch for arrows</string>
+    <string name="pravka_numrow">Pravka: show numbers for 5 seconds</string>
     <string name="pravka_fab_label">Правка — плавающая кнопка</string>
     <string name="pravka_fab_description">Плавающая кнопка «П» поверх любых приложений: короткое нажатие — диктовка в текущее поле, долгое — правка текста поля. Для случаев, когда клавиатура не открыта (просмотр PDF и т.п.). Доступ к содержимому окон используется только для чтения и записи текстового поля.</string>
     <string name="toolbar_keys">Select toolbar keys</string>
