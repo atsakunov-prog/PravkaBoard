@@ -62,6 +62,20 @@ class KeyboardParser(private val params: KeyboardParams, private val context: Co
         }
         val baseKeys = LayoutParser.parseLayout(layoutType, params, context)
         val keysInRows = createRows(baseKeys)
+        // PravkaBoard: on the folded (outer) screen add a nav row under the
+        // bottom row - select-all and the selection latch on the left, arrows
+        // in the middle, copy/paste on the right (owner's request).
+        if (helium314.keyboard.latin.utils.FoldableUtils.isFolded && params.mId.element.isAlphaOrSymbol) {
+            val navLabels = listOf("select_all", "pravka_select", "left", "up", "down", "right", "copy", "paste")
+            val navRow = ArrayList<KeyParams>()
+            navLabels.forEach { label ->
+                navRow.add(
+                    TextKeyData(label = label, width = 1f / navLabels.size, type = KeyType.FUNCTION)
+                        .toKeyParams(params, defaultLabelFlags)
+                )
+            }
+            keysInRows.add(navRow)
+        }
         val heightRescale: Float
         if (params.mId.element.isBottomRow) {
             heightRescale = 4f

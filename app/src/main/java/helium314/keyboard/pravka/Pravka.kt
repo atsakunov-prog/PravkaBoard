@@ -37,7 +37,13 @@ class Pravka(private val ime: LatinIME) {
         @JvmStatic
         fun onHideWindow() {
             instance?.onHide()
+            selectionLatch = false
         }
+
+        /** While true, arrow keys extend the selection (shift+arrow key events). */
+        @JvmStatic
+        var selectionLatch = false
+            private set
     }
 
     private val crashLogger = CoroutineExceptionHandler { _, e ->
@@ -70,9 +76,24 @@ class Pravka(private val ime: LatinIME) {
             KeyCode.PRAVKA_POLISH -> cleanField(PravkaPrompts.REDO_POLISH, strong = true)
             KeyCode.PRAVKA_VOICE -> toggleDictation()
             KeyCode.PRAVKA_SET_KEY -> setApiKeyFromClipboard()
+            KeyCode.PRAVKA_SELECT -> {
+                selectionLatch = !selectionLatch
+                toast(if (selectionLatch) "Выделение стрелками: ВКЛ" else "Выделение стрелками: выкл")
+            }
             else -> return false
         }
         return true
+    }
+
+    /** Arrow key while the selection latch is on: extend the selection. */
+    fun sendShiftArrow(keyEventCode: Int) {
+        val ic = ime.currentInputConnection ?: return
+        val now = android.os.SystemClock.uptimeMillis()
+        val meta = android.view.KeyEvent.META_SHIFT_ON or android.view.KeyEvent.META_SHIFT_LEFT_ON
+        runCatching {
+            ic.sendKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, keyEventCode, 0, meta))
+            ic.sendKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_UP, keyEventCode, 0, meta))
+        }
     }
 
     // ---- API key: copy the key, long-press the Pravka toolbar key ----

@@ -106,9 +106,18 @@ class KeyboardActionListenerImpl(private val latinIME: LatinIME, private val inp
     override fun onCodeInput(primaryCode: Int, x: Int, y: Int, isKeyRepeat: Boolean) {
         when (primaryCode) {
             KeyCode.PRAVKA_CLEAN, KeyCode.PRAVKA_VOICE, KeyCode.PRAVKA_SHORTER,
-            KeyCode.PRAVKA_LONGER, KeyCode.PRAVKA_POLISH, KeyCode.PRAVKA_SET_KEY -> {
+            KeyCode.PRAVKA_LONGER, KeyCode.PRAVKA_POLISH, KeyCode.PRAVKA_SET_KEY,
+            KeyCode.PRAVKA_SELECT -> {
                 helium314.keyboard.pravka.Pravka.get(latinIME).onToolbarKey(primaryCode)
                 return
+            }
+            // Selection latch: arrows extend the selection instead of moving the cursor.
+            KeyCode.ARROW_LEFT, KeyCode.ARROW_RIGHT, KeyCode.ARROW_UP, KeyCode.ARROW_DOWN -> {
+                if (helium314.keyboard.pravka.Pravka.selectionLatch) {
+                    helium314.keyboard.pravka.Pravka.get(latinIME)
+                        .sendShiftArrow(KeyCode.keyCodeToKeyEventCode(primaryCode))
+                    return
+                }
             }
             KeyCode.TOGGLE_AUTOCORRECT -> return settings.toggleAutoCorrect()
             KeyCode.TOGGLE_INCOGNITO_MODE -> {

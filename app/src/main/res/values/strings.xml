@@ -348,6 +348,7 @@
     <string name="pravka_shorter">Pravka: shorter</string>
     <string name="pravka_longer">Pravka: longer</string>
     <string name="pravka_polish">Pravka: polish style</string>
+    <string name="pravka_select">Pravka: selection latch for arrows</string>
     <string name="toolbar_keys">Select toolbar keys</string>
     <!-- Names of the toolbar keys-->
     <string name="paste" tools:keep="@string/paste" translatable="false">@android:string/paste</string>

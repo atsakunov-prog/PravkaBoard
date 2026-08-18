@@ -192,6 +192,7 @@ object KeyCode {
     const val PRAVKA_LONGER =             -10063
     const val PRAVKA_POLISH =             -10064
     const val PRAVKA_SET_KEY =            -10065
+    const val PRAVKA_SELECT =             -10066  // latch: arrows extend the selection
 
     // Valid in popups and for toolbar key long press only
     const val KEY_REPEAT =                -11000
@@ -220,7 +221,7 @@ object KeyCode {
         TIMESTAMP, CTRL_LEFT, CTRL_RIGHT, ALT_LEFT, ALT_RIGHT, META_LEFT, META_RIGHT, SEND_INTENT_ONE, SEND_INTENT_TWO,
         SEND_INTENT_THREE, EMOJI_SEARCH, INLINE_EMOJI_SEARCH_DONE, META_LOCK,
         BACKGROUND_GATHERING, BACKGROUND_GATHERING_TEMP_OFF, DPAD,
-        PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH, PRAVKA_SET_KEY,
+        PRAVKA_CLEAN, PRAVKA_VOICE, PRAVKA_SHORTER, PRAVKA_LONGER, PRAVKA_POLISH, PRAVKA_SET_KEY, PRAVKA_SELECT,
         -> this
 
         KEY_REPEAT if (longPress) -> this
