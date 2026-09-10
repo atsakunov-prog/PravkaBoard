@@ -1,5 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+// Номер сборки берём из GitHub Actions (GITHUB_RUN_NUMBER); локально 0.
+val ciBuildNumber: Int = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,9 +19,11 @@ android {
         applicationId = "ru.tsakunov.pravka"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // versionCode растёт с каждой сборкой в CI, иначе Android не даст поставить обновление поверх.
+        versionCode = if (ciBuildNumber > 0) ciBuildNumber else 1
+        versionName = "0.2.0"
         vectorDrawables.useSupportLibrary = true
+        buildConfigField("int", "BUILD_NUMBER", ciBuildNumber.toString())
     }
 
     // Один общий ключ для debug и release, чтобы обновления ставились поверх

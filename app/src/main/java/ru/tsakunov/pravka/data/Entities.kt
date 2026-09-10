@@ -79,4 +79,6 @@ data class WordListWithCount(
     val title: String,
     val createdAt: Long,
     val itemCount: Int,
+    /** Сколько слов реально можно писать: непустые английские плюс непустые русские. */
+    val taskCount: Int,
 )

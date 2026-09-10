@@ -122,8 +122,9 @@ class ClaudeVocabParser(private val context: Context) {
 
     private fun parseResponse(text: String): ParsedVocabulary {
         val root = JSONObject(text)
-        if (root.optString("stop_reason") == "refusal") {
-            throw ClaudeException("Модель отказалась разбирать это фото. Попробуй переснять.")
+        when (root.optString("stop_reason")) {
+            "refusal" -> throw ClaudeException("Модель отказалась разбирать это фото. Попробуй переснять.")
+            "max_tokens" -> throw ClaudeException("Ответ модели оборвался: слишком много слов на фото. Попробуй снять по одной странице.")
         }
         val blocks = root.optJSONArray("content") ?: JSONArray()
         for (i in 0 until blocks.length()) {
@@ -196,15 +197,22 @@ class ClaudeVocabParser(private val context: Context) {
     private fun encodeImage(uri: Uri): String {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: throw ClaudeException("Не удалось открыть фото")
+        (resolver.openInputStream(uri) ?: throw ClaudeException("Не удалось открыть фото")).use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw ClaudeException("Файл не похож на фото")
+
         var sample = 1
         val longSide = maxOf(bounds.outWidth, bounds.outHeight)
         while (longSide / (sample * 2) >= MAX_SIDE) sample *= 2
 
-        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        var bmp = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
-            ?: throw ClaudeException("Не удалось прочитать фото")
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565 // без альфы: вдвое меньше памяти на большое фото
+        }
+        var bmp = (resolver.openInputStream(uri) ?: throw ClaudeException("Не удалось открыть фото")).use {
+            BitmapFactory.decodeStream(it, null, opts)
+        } ?: throw ClaudeException("Не удалось прочитать фото")
 
         val rotation = resolver.openInputStream(uri)?.use { s ->
             runCatching {

@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -18,6 +20,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.data.Lang
@@ -50,8 +53,18 @@ fun PravkaRoot(app: PravkaApp) {
 
     LaunchedEffect(toast) {
         val t = toast ?: return@LaunchedEffect
-        vm.toastShown()
         snackbar.showSnackbar(t)
+        vm.toastShown()
+    }
+
+    // Экран не гаснет на тренировке. Флаг держится здесь, а не внутри экрана: при переходе
+    // «Дальше» старый экран тренировки исчезает уже после появления нового и сбросил бы флаг.
+    val backStackEntry by nav.currentBackStackEntryAsState()
+    val onPractice = backStackEntry?.destination?.route == Routes.PRACTICE
+    val view = LocalView.current
+    DisposableEffect(onPractice) {
+        view.keepScreenOn = onPractice
+        onDispose { view.keepScreenOn = false }
     }
 
     PravkaTheme {

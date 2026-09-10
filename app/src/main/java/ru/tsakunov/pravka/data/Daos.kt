@@ -13,7 +13,9 @@ interface WordListDao {
     @Query(
         """
         SELECT l.id, l.title, l.createdAt,
-               (SELECT COUNT(*) FROM word_items i WHERE i.listId = l.id) AS itemCount
+               (SELECT COUNT(*) FROM word_items i WHERE i.listId = l.id) AS itemCount,
+               (SELECT COUNT(*) FROM word_items i WHERE i.listId = l.id AND TRIM(i.en) != '') +
+               (SELECT COUNT(*) FROM word_items i WHERE i.listId = l.id AND TRIM(i.ru) != '') AS taskCount
         FROM word_lists l
         ORDER BY l.createdAt DESC
         """,

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package ru.tsakunov.pravka.ui.components
 
 import androidx.compose.foundation.Canvas
@@ -6,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -160,7 +164,7 @@ fun SpeedChart(
             while (v <= niceMax + 1e-9) {
                 val y = yOf(v)
                 drawLine(PravkaColors.Grid, Offset(left, y), Offset(right, y), strokeWidth = 1f)
-                val txt = measurer.measure(if (tickStep >= 1) v.toInt().toString() else String.format("%.1f", v).replace('.', ','), labelStyle)
+                val txt = measurer.measure(if (tickStep % 1.0 == 0.0) v.toInt().toString() else String.format("%.1f", v).replace('.', ','), labelStyle)
                 drawText(txt, topLeft = Offset(left - txt.size.width - 6.dp.toPx(), y - txt.size.height / 2))
                 v += tickStep
             }
@@ -218,10 +222,10 @@ fun SpeedChart(
         }
 
         // Легенда
-        Row(
+        FlowRow(
             Modifier.fillMaxWidth().padding(top = 4.dp),
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
         ) {
             LegendEntry("слово") { Box(Modifier.size(8.dp).background(color, CircleShape)) }
             if (data.any { it.source == Attempt.SOURCE_PAPER }) {

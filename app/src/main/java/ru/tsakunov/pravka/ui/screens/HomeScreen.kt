@@ -2,6 +2,7 @@
 
 package ru.tsakunov.pravka.ui.screens
 
+import android.content.ActivityNotFoundException
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -17,6 +18,8 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -32,6 +35,7 @@ import ru.tsakunov.pravka.ui.lettersWord
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import ru.tsakunov.pravka.ui.vm.ParseState
+import ru.tsakunov.pravka.ui.vm.UpdateState
 import ru.tsakunov.pravka.ui.wordsWord
 import java.io.File
 
@@ -48,18 +52,22 @@ fun HomeScreen(
     val settings by vm.settingsState.collectAsStateWithLifecycle()
     val parse by vm.parse.collectAsStateWithLifecycle()
 
-    val pending = remember { mutableStateListOf<Uri>() }
-    var cameraTarget by remember { mutableStateOf<Uri?>(null) }
+    // Переживают уничтожение процесса, пока открыта камера (Uri — Parcelable).
+    var pending by rememberSaveable(stateSaver = listSaver<List<Uri>, String>(save = { it.map(Uri::toString) }, restore = { it.map(Uri::parse) })) {
+        mutableStateOf(emptyList())
+    }
+    var cameraTarget by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val update by vm.update.collectAsStateWithLifecycle()
     var showManual by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<WordListWithCount?>(null) }
 
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val target = cameraTarget
-        if (ok && target != null) pending += target
+        if (ok && target != null) pending = pending + target
         cameraTarget = null
     }
     val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(4)) { uris ->
-        pending += uris
+        pending = (pending + uris).distinct()
     }
 
     fun openCamera() {
@@ -67,14 +75,19 @@ fun HomeScreen(
         val file = File(dir, "page_${System.currentTimeMillis()}.jpg")
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         cameraTarget = uri
-        takePicture.launch(uri)
+        try {
+            takePicture.launch(uri)
+        } catch (e: ActivityNotFoundException) {
+            cameraTarget = null
+            vm.showToast("На телефоне нет приложения камеры, выбери фото из галереи")
+        }
     }
 
     // Итог разбора фото
     LaunchedEffect(parse) {
         val p = parse
         if (p is ParseState.Done) {
-            pending.clear()
+            pending = emptyList()
             vm.parseHandled()
             onOpenList(p.list.id)
         }
@@ -110,6 +123,13 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+
+            when (val u = update) {
+                is UpdateState.Available -> item { UpdateBanner(u.info, progress = null, onAction = { vm.downloadUpdate(u.info) }, onDismiss = { vm.dismissUpdate() }) }
+                is UpdateState.Downloading -> item { UpdateBanner(u.info, progress = u.progress, onAction = {}, onDismiss = null) }
+                is UpdateState.Ready -> item { UpdateBanner(u.info, progress = 1f, onAction = { vm.installUpdate(u.file) }, onDismiss = { vm.dismissUpdate() }, ready = true) }
+                else -> Unit
             }
 
             item {
@@ -153,7 +173,7 @@ fun HomeScreen(
                             enabled = parse !is ParseState.Running,
                         )
                         Spacer(Modifier.height(6.dp))
-                        TextButton(onClick = { pending.clear() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        TextButton(onClick = { pending = emptyList() }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                             Text("Сбросить фото", color = PravkaColors.Muted)
                         }
                     }
@@ -167,8 +187,9 @@ fun HomeScreen(
             }
 
             items(lists, key = { it.id }) { list ->
-                val doneToday = attempts.count { it.listId == list.id && isToday(it.ts) }
-                val total = list.itemCount * 2
+                val doneToday = attempts.filter { it.listId == list.id && isToday(it.ts) && it.itemId != null }
+                    .map { it.itemId to it.lang }.toSet().size
+                val total = list.taskCount
                 ListRow(
                     list = list,
                     doneToday = doneToday,
@@ -256,6 +277,42 @@ private fun ListRow(list: WordListWithCount, doneToday: Int, total: Int, onClick
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = PravkaColors.Muted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateBanner(
+    info: ru.tsakunov.pravka.api.UpdateInfo,
+    progress: Float?,
+    onAction: () -> Unit,
+    onDismiss: (() -> Unit)?,
+    ready: Boolean = false,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = PravkaColors.EnSoft,
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                if (ready) "Сборка ${info.buildNumber} скачана" else "Есть новая версия: ${info.versionName.ifBlank { "сборка" }} (сборка ${info.buildNumber})",
+                style = MaterialTheme.typography.titleMedium, color = PravkaColors.EnText,
+            )
+            Spacer(Modifier.height(8.dp))
+            when {
+                ready -> BigButton("Установить", onClick = onAction, container = PravkaColors.En)
+                progress != null -> {
+                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth(), color = PravkaColors.En, trackColor = PravkaColors.Surface)
+                    Text("Скачиваю… ${(progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = PravkaColors.EnText, modifier = Modifier.padding(top = 6.dp))
+                }
+                else -> BigButton("Обновить (${info.sizeBytes / 1_000_000} МБ)", onClick = onAction, container = PravkaColors.En)
+            }
+            if (onDismiss != null) {
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text("Позже", color = PravkaColors.EnText)
+                }
             }
         }
     }

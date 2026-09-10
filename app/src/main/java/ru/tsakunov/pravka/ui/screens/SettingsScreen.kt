@@ -28,11 +28,13 @@ import ru.tsakunov.pravka.BuildConfig
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
+import ru.tsakunov.pravka.ui.vm.UpdateState
 import java.time.LocalDate
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     val settings by vm.settingsState.collectAsStateWithLifecycle()
+    val update by vm.update.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -46,7 +48,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
         scope.launch {
             val json = vm.exportJson()
             withContext(Dispatchers.IO) {
-                context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
             }
             vm.showToast("Резервная копия сохранена")
         }
@@ -142,6 +144,46 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(10.dp))
                 TextButton(onClick = { confirmReset = true }) { Text("Сбросить все данные", color = PravkaColors.Danger) }
+            }
+
+            PravkaCard {
+                Text("Обновления", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Установлена версия ${BuildConfig.VERSION_NAME}" +
+                        (if (BuildConfig.BUILD_NUMBER > 0) ", сборка ${BuildConfig.BUILD_NUMBER}" else ", локальная сборка"),
+                    color = PravkaColors.Ink2,
+                )
+                Spacer(Modifier.height(10.dp))
+                when (val u = update) {
+                    is UpdateState.Checking -> Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = PravkaColors.En)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Проверяю GitHub…", color = PravkaColors.Ink2)
+                    }
+                    is UpdateState.UpToDate -> Text("У тебя последняя версия.", color = PravkaColors.GoodText)
+                    is UpdateState.Available -> {
+                        Text("Доступна ${u.info.versionName.ifBlank { "новая версия" }} (сборка ${u.info.buildNumber}), ${u.info.sizeBytes / 1_000_000} МБ", color = PravkaColors.EnText)
+                        Spacer(Modifier.height(8.dp))
+                        BigButton("Скачать и установить", onClick = { vm.downloadUpdate(u.info) }, container = PravkaColors.En)
+                    }
+                    is UpdateState.Downloading -> {
+                        LinearProgressIndicator(progress = { u.progress }, modifier = Modifier.fillMaxWidth(), color = PravkaColors.En, trackColor = PravkaColors.Surface2)
+                        Text("Скачиваю… ${(u.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = PravkaColors.Ink2, modifier = Modifier.padding(top = 6.dp))
+                    }
+                    is UpdateState.Ready -> BigButton("Установить сборку ${u.info.buildNumber}", onClick = { vm.installUpdate(u.file) }, container = PravkaColors.En)
+                    is UpdateState.Error -> Text(u.message, color = PravkaColors.Danger)
+                    UpdateState.Idle -> Unit
+                }
+                if (update !is UpdateState.Downloading && update !is UpdateState.Checking) {
+                    Spacer(Modifier.height(8.dp))
+                    SecondaryButton("Проверить обновления", onClick = { vm.checkUpdates() }, modifier = Modifier.fillMaxWidth())
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Сборки берутся из GitHub Releases репозитория PravkaBoard. При первой установке обновления Android спросит разрешение ставить приложения из этого источника.",
+                    style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
+                )
             }
 
             PravkaCard {

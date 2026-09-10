@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.tsakunov.pravka.data.Attempt
@@ -24,6 +25,8 @@ import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.isToday
+import ru.tsakunov.pravka.domain.repeatRows
+import ru.tsakunov.pravka.domain.repeatSummary
 import ru.tsakunov.pravka.domain.statsFor
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.fmtNum
@@ -67,6 +70,7 @@ fun ListScreen(
     val tasks = remember(items) { tasksOf(items) }
     val todayHere = remember(attempts, listId) { attempts.filter { it.listId == listId && isToday(it.ts) } }
     val firstUndone = tasks.firstOrNull { doneToday(attempts, it) == null }
+    val repeats = remember(attempts, listId) { repeatRows(attempts, listId) }
 
     Scaffold(
         containerColor = PravkaColors.Page,
@@ -75,7 +79,7 @@ fun ListScreen(
                 navigationIcon = { BackIcon(onBack) },
                 title = {
                     Text(
-                        list?.title ?: "", fontWeight = FontWeight.Bold, maxLines = 1,
+                        list?.title ?: "", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.clickable { renaming = true },
                     )
                 },
@@ -120,6 +124,16 @@ fun ListScreen(
                         Text("Можно повторить любое слово, нажав на него.", style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted)
                     } else {
                         Text("В списке пока нет слов. Добавь через плюс сверху.", color = PravkaColors.Muted)
+                    }
+                }
+            }
+
+            if (repeats.isNotEmpty()) {
+                item {
+                    PravkaCard {
+                        Text("Повторы", style = MaterialTheme.typography.titleMedium)
+                        repeatSummary(repeats)?.let { RepeatSummaryText(it, Modifier.padding(top = 4.dp, bottom = 8.dp)) }
+                        RepeatTable(repeats)
                     }
                 }
             }
@@ -214,7 +228,7 @@ private fun WordChip(text: String, lang: Lang, done: Attempt?, modifier: Modifie
             if (!enabled) {
                 Text("—", color = PravkaColors.Muted)
             } else {
-                Text(text, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                Text(text, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     if (done != null) "✓ ${fmtTime(done.ms)} · ${fmtNum(done.secPerLetter)} с/б" else lettersWord(countLetters(text)),
                     style = MaterialTheme.typography.labelSmall,

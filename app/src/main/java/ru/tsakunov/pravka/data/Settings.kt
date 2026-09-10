@@ -47,14 +47,21 @@ class Settings(context: Context) {
         _state.value = read()
     }
 
-    var seeded: Boolean
-        get() = prefs.getBoolean(KEY_SEEDED, false)
-        set(v) = prefs.edit().putBoolean(KEY_SEEDED, v).apply()
+    /** Версия посева бумажной статистики; 0 — ещё не сеяли. Старый флаг seeded_v1 считается версией 1. */
+    var seedVersion: Int
+        get() = prefs.getInt(KEY_SEED_VERSION, if (prefs.getBoolean(KEY_SEEDED_V1, false)) 1 else 0)
+        set(v) = prefs.edit().putInt(KEY_SEED_VERSION, v).apply()
+
+    var lastUpdateCheck: Long
+        get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
+        set(v) = prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, v).apply()
 
     private companion object {
+        const val KEY_LAST_UPDATE_CHECK = "last_update_check"
         const val KEY_API = "api_key"
         const val KEY_MODEL = "model"
         const val KEY_METRIC = "metric"
-        const val KEY_SEEDED = "seeded_v1"
+        const val KEY_SEEDED_V1 = "seeded_v1"
+        const val KEY_SEED_VERSION = "seed_version"
     }
 }

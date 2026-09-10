@@ -7,6 +7,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
@@ -21,7 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -47,6 +47,8 @@ import ru.tsakunov.pravka.ui.vm.AppViewModel
 private sealed interface Phase {
     data object Ready : Phase
     data class Running(val startedAt: Long) : Phase
+    /** СТОП нажат, запись ещё сохраняется; защищает от двойного нажатия. */
+    data object Saving : Phase
     data class Result(val attempt: Attempt, val verdict: Verdict) : Phase
 }
 
@@ -63,7 +65,6 @@ fun PracticeScreen(
     val items by vm.observeItems(listId).collectAsStateWithLifecycle(initialValue = emptyList())
     val attempts by vm.attempts.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val view = LocalView.current
     val scope = rememberCoroutineScope()
 
     val item = items.firstOrNull { it.id == itemId }
@@ -73,12 +74,6 @@ fun PracticeScreen(
     var phase by remember(itemId, lang) { mutableStateOf<Phase>(Phase.Ready) }
     var elapsed by remember(itemId, lang) { mutableLongStateOf(0L) }
     var confetti by remember { mutableIntStateOf(0) }
-
-    // Экран не гаснет, пока Боря пишет.
-    DisposableEffect(Unit) {
-        view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false }
-    }
 
     // Тик таймера
     val running = phase as? Phase.Running
@@ -100,9 +95,11 @@ fun PracticeScreen(
         val ms = (SystemClock.elapsedRealtime() - r.startedAt).coerceAtLeast(100)
         elapsed = ms
         val it = item ?: return
+        phase = Phase.Saving
         scope.launch {
             val a = vm.recordAttempt(it, lang, ms)
-            val verdict = evaluate(a, attempts + a)
+            // Поток из Room мог уже успеть отдать новую запись: не считаем её дважды.
+            val verdict = evaluate(a, attempts.filter { x -> x.id != a.id } + a)
             phase = Phase.Result(a, verdict)
             if (verdict.celebrate) {
                 confetti++
@@ -150,23 +147,24 @@ fun PracticeScreen(
                 }
 
                 when (val p = phase) {
-                    is Phase.Ready, is Phase.Running -> {
+                    is Phase.Ready, is Phase.Running, is Phase.Saving -> {
                         Spacer(Modifier.weight(1f))
                         Text(
                             fmtTime(elapsed, tenths = true),
                             style = TextStyle(
-                                fontSize = 88.sp, fontWeight = FontWeight.ExtraBold, fontFeatureSettings = "tnum",
+                                fontSize = 76.sp, fontWeight = FontWeight.ExtraBold, fontFeatureSettings = "tnum",
                                 color = if (p is Phase.Running) PravkaColors.Danger else PravkaColors.Ink, letterSpacing = (-2).sp,
                             ),
+                            maxLines = 1, softWrap = false,
                         )
                         Spacer(Modifier.weight(1f))
-                        if (p is Phase.Ready) {
-                            HugeButton("СТАРТ", PravkaColors.Good, enabled = item != null && letters > 0) {
+                        when (p) {
+                            is Phase.Ready -> HugeButton("СТАРТ", PravkaColors.Good, enabled = item != null && letters > 0) {
                                 elapsed = 0
                                 phase = Phase.Running(SystemClock.elapsedRealtime())
                             }
-                        } else {
-                            HugeButton("СТОП", PravkaColors.Danger) { stop() }
+                            is Phase.Running -> HugeButton("СТОП", PravkaColors.Danger) { stop() }
+                            else -> HugeButton("…", PravkaColors.Danger, enabled = false) {}
                         }
                         Spacer(Modifier.height(24.dp))
                     }
@@ -235,7 +233,8 @@ private fun ResultBlock(attempt: Attempt, v: Verdict) {
             Text("  с/букву", style = MaterialTheme.typography.titleMedium, color = PravkaColors.Ink2, modifier = Modifier.padding(bottom = 6.dp))
         }
         Spacer(Modifier.height(14.dp))
-        AnimatedVisibility(visible = true, enter = scaleIn(spring(dampingRatio = 0.5f)) + fadeIn()) {
+        val shown = remember { MutableTransitionState(false).apply { targetState = true } }
+        AnimatedVisibility(visibleState = shown, enter = scaleIn(spring(dampingRatio = 0.5f)) + fadeIn()) {
             val (bg, fg, label) = when (v.kind) {
                 VerdictKind.RECORD -> Triple(PravkaColors.GoldSoft, PravkaColors.GoldText, "НОВЫЙ РЕКОРД!")
                 VerdictKind.FASTER -> Triple(PravkaColors.GoodSoft, PravkaColors.GoodText, "Быстрее среднего")

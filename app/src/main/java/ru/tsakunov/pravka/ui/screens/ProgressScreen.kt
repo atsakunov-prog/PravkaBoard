@@ -22,6 +22,8 @@ import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.Metric
 import ru.tsakunov.pravka.domain.LangStats
 import ru.tsakunov.pravka.domain.isToday
+import ru.tsakunov.pravka.domain.repeatRows
+import ru.tsakunov.pravka.domain.repeatSummary
 import ru.tsakunov.pravka.domain.statsFor
 import ru.tsakunov.pravka.ui.*
 import ru.tsakunov.pravka.ui.components.*
@@ -29,6 +31,8 @@ import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+private const val MAX_REPEAT_ROWS = 12
 
 @Composable
 fun ProgressScreen(vm: AppViewModel, onTab: (Tab) -> Unit) {
@@ -43,6 +47,7 @@ fun ProgressScreen(vm: AppViewModel, onTab: (Tab) -> Unit) {
     val today = attempts.filter { isToday(it.ts) }
     val en = remember(attempts) { statsFor(Lang.EN, attempts) }
     val ru = remember(attempts) { statsFor(Lang.RU, attempts) }
+    val repeats = remember(attempts) { repeatRows(attempts) }
 
     Scaffold(
         containerColor = PravkaColors.Page,
@@ -72,6 +77,22 @@ fun ProgressScreen(vm: AppViewModel, onTab: (Tab) -> Unit) {
                             Pill(
                                 "сегодня +${today.sumOf { it.letters }} букв · ${wordsWord(today.size)}",
                                 bg = PravkaColors.GoodSoft, fg = PravkaColors.GoodText,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (repeats.isNotEmpty()) {
+                item {
+                    PravkaCard {
+                        Text("То же слово во второй раз", style = MaterialTheme.typography.titleMedium)
+                        repeatSummary(repeats)?.let { RepeatSummaryText(it, Modifier.padding(top = 4.dp, bottom = 8.dp)) }
+                        RepeatTable(repeats.take(MAX_REPEAT_ROWS))
+                        if (repeats.size > MAX_REPEAT_ROWS) {
+                            Text(
+                                "Показаны последние $MAX_REPEAT_ROWS из ${wordsWord(repeats.size)}. Полный список по каждому списку слов внутри него.",
+                                style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 6.dp),
                             )
                         }
                     }

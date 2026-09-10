@@ -1,6 +1,8 @@
 package ru.tsakunov.pravka.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,7 +45,7 @@ fun ManualListDialog(onCreate: (title: String, text: String) -> Unit, onDismiss:
         onDismissRequest = onDismiss,
         title = { Text("Список слов вручную") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = title, onValueChange = { title = it }, label = { Text("Название") },
                     placeholder = { Text("Например, Lesson 3") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -52,7 +54,7 @@ fun ManualListDialog(onCreate: (title: String, text: String) -> Unit, onDismiss:
                     value = text, onValueChange = { text = it },
                     label = { Text("Слова, по одному в строке") },
                     placeholder = { Text("hen - курица\ngoose - гусь\nseed - семя") },
-                    minLines = 5, maxLines = 12, modifier = Modifier.fillMaxWidth(),
+                    minLines = 4, maxLines = 10, modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                 )
                 Text("Разделитель: дефис или тире с пробелами, двоеточие или табуляция.", style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted)

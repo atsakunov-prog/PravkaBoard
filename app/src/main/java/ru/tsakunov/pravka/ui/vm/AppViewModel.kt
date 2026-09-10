@@ -12,6 +12,10 @@ import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.api.ClaudeException
 import ru.tsakunov.pravka.api.ClaudeVocabParser
+import ru.tsakunov.pravka.api.UpdateException
+import ru.tsakunov.pravka.api.UpdateInfo
+import ru.tsakunov.pravka.api.Updater
+import java.io.File
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.Metric
@@ -20,6 +24,16 @@ import ru.tsakunov.pravka.data.Settings
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.data.WordList
 import ru.tsakunov.pravka.domain.countLetters
+
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data object UpToDate : UpdateState
+    data class Available(val info: UpdateInfo) : UpdateState
+    data class Downloading(val info: UpdateInfo, val progress: Float) : UpdateState
+    data class Ready(val info: UpdateInfo, val file: File) : UpdateState
+    data class Error(val message: String) : UpdateState
+}
 
 sealed interface ParseState {
     data object Idle : ParseState
@@ -32,7 +46,57 @@ class AppViewModel(
     private val repo: Repository,
     private val settings: Settings,
     private val parser: ClaudeVocabParser,
+    private val updater: Updater,
 ) : ViewModel() {
+
+    // ---- Обновления из GitHub ----
+    private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
+    val update: StateFlow<UpdateState> = _update
+    val currentBuild: Int get() = updater.currentBuild
+
+    init {
+        // Тихая проверка не чаще раза в 6 часов; результат виден как баннер на главном экране.
+        val now = System.currentTimeMillis()
+        if (now - settings.lastUpdateCheck > 6 * 60 * 60 * 1000L) checkUpdates(silent = true)
+    }
+
+    fun checkUpdates(silent: Boolean = false) {
+        if (_update.value is UpdateState.Downloading) return
+        if (!silent) _update.value = UpdateState.Checking
+        viewModelScope.launch {
+            try {
+                val info = updater.check()
+                settings.lastUpdateCheck = System.currentTimeMillis()
+                _update.value = if (info != null) UpdateState.Available(info) else if (silent) UpdateState.Idle else UpdateState.UpToDate
+            } catch (e: UpdateException) {
+                if (!silent) _update.value = UpdateState.Error(e.message ?: "Ошибка")
+            } catch (e: Exception) {
+                if (!silent) _update.value = UpdateState.Error("Не удалось проверить: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    fun downloadUpdate(info: UpdateInfo) {
+        if (_update.value is UpdateState.Downloading) return
+        _update.value = UpdateState.Downloading(info, 0f)
+        viewModelScope.launch {
+            try {
+                val file = updater.download(info) { p -> _update.value = UpdateState.Downloading(info, p) }
+                _update.value = UpdateState.Ready(info, file)
+                updater.install(file)
+            } catch (e: UpdateException) {
+                _update.value = UpdateState.Error(e.message ?: "Ошибка")
+            } catch (e: Exception) {
+                _update.value = UpdateState.Error("Не удалось обновить: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    fun installUpdate(file: File) {
+        runCatching { updater.install(file) }.onFailure { showToast("Не удалось открыть установщик: ${it.message}") }
+    }
+
+    fun dismissUpdate() { _update.value = UpdateState.Idle }
 
     val settingsState = settings.state
     val lists = repo.observeLists().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -121,6 +185,6 @@ class AppViewModel(
     class Factory(private val app: PravkaApp) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            AppViewModel(app.repository, app.settings, ClaudeVocabParser(app)) as T
+            AppViewModel(app.repository, app.settings, ClaudeVocabParser(app), Updater(app)) as T
     }
 }

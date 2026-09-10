@@ -65,12 +65,13 @@ fun parseTimeInput(text: String): Long? {
     if (t.isEmpty()) return null
     val parts = t.split(':')
     return try {
-        when (parts.size) {
+        val ms = when (parts.size) {
             1 -> (parts[0].toDouble() * 1000).roundToInt().toLong()
             2 -> (parts[0].toInt() * 60_000L) + (parts[1].toDouble() * 1000).roundToInt()
             else -> null
-        }?.takeIf { it > 0 }
-    } catch (_: NumberFormatException) {
+        }
+        ms?.takeIf { it > 0 }
+    } catch (_: IllegalArgumentException) { // NumberFormatException и NaN/бесконечность при округлении
         null
     }
 }

@@ -21,9 +21,10 @@ class Repository(
 
     // ---- Посев ----
     suspend fun seedIfNeeded() {
-        if (settings.seeded) return
-        if (attempts.count() == 0) attempts.insertAll(Seed.attempts())
-        settings.seeded = true
+        if (settings.seedVersion >= Seed.VERSION) return
+        // Идентификаторы посева стабильны, REPLACE лишь дополняет и обновляет бумажные записи.
+        attempts.insertAll(Seed.attempts())
+        settings.seedVersion = Seed.VERSION
     }
 
     // ---- Списки ----
