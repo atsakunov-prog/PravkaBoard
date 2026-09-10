@@ -11,7 +11,10 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class ClaudeException(message: String) : Exception(message)
+open class ClaudeException(message: String) : Exception(message)
+
+/** Пакет или его итоги больше недоступны на сервере (404). */
+class BatchGoneException(message: String) : ClaudeException(message)
 
 /**
  * Тонкая обёртка над Messages API: один запрос с принудительным вызовом инструмента,

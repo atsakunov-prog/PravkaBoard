@@ -282,7 +282,7 @@ class AppViewModel(
         val now = System.currentTimeMillis()
         if (now - settings.lastUpdateCheck > 6 * 60 * 60 * 1000L) checkUpdates(silent = true)
         // Отправленные пакеты проверяем при каждом запуске.
-        intake.refresh()
+        intake.refresh(startup = true)
     }
 
     fun checkUpdates(silent: Boolean = false) {

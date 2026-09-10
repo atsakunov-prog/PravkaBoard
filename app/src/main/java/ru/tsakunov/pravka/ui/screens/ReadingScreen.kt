@@ -99,6 +99,7 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
     var sessionStart by remember(textId) { mutableLongStateOf(0L) }
     var partial by remember { mutableStateOf("") }
     var speechBegan by remember { mutableLongStateOf(0L) }
+    var speechEnded by remember { mutableLongStateOf(0L) }
     var listenStart by remember { mutableLongStateOf(0L) }
 
     var micGranted by remember {
@@ -167,27 +168,30 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
         speaker.stop()
         partial = ""
         speechBegan = 0L
+        speechEnded = 0L
         listenStart = SystemClock.elapsedRealtime()
         speech.start(
             language = if (m.step == Step.READ) "en-US" else "ru-RU",
             silenceMs = if (m.step == Step.READ) 2500L else 1800L,
             onPartial = { partial = it },
             onBegin = { speechBegan = SystemClock.elapsedRealtime() },
-            onEnd = {},
+            onEnd = { speechEnded = SystemClock.elapsedRealtime() },
             onResult = { results ->
-                val current = phase as? ReadPhase.Mic ?: return@start
-                if (current.idx != m.idx || current.step != m.step) return@start
+                // Результат принадлежит именно этому запуску: после «Ещё раз» или паузы фаза уже другая.
+                if (phase != m) return@start
                 val best = results.firstOrNull()?.trim() ?: ""
                 val now = SystemClock.elapsedRealtime()
-                val spoke = now - (if (speechBegan > 0) speechBegan else listenStart)
+                // Время чтения: от начала речи до её конца по данным движка, без ожидания тишины и распознавания.
+                val begin = if (speechBegan > 0) speechBegan else listenStart
+                val end = if (speechEnded > begin) speechEnded else now
+                val spoke = end - begin
                 val d = drafts[m.idx]
                 drafts[m.idx] = if (m.step == Step.READ) d.copy(heardEn = best, readMs = spoke.coerceAtLeast(500)) else d.copy(heardRu = best)
                 partial = ""
                 advance(m)
             },
             onError = { code ->
-                val current = phase as? ReadPhase.Mic ?: return@start
-                if (current.idx != m.idx || current.step != m.step) return@start
+                if (phase != m) return@start
                 if (SpeechInput.isRetryable(code) && m.attempt < 2) phase = m.copy(attempt = m.attempt + 1)
                 else phase = m.copy(hint = SpeechInput.describeError(code), error = true)
             },
@@ -268,7 +272,7 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
                             }
                             is ReadPhase.Mic -> MicPanel(
                                 m = p, sentence = sentences.getOrNull(p.idx) ?: "", total = sentences.size, partial = partial, elapsed = elapsed,
-                                onRetry = { phase = p.copy(attempt = p.attempt + 1, hint = null) },
+                                onRetry = { speech.stop(); phase = p.copy(attempt = p.attempt + 1, hint = null, error = false) },
                                 onSkip = {
                                     speech.stop()
                                     val d = drafts[p.idx]

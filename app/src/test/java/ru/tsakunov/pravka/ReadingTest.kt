@@ -26,6 +26,12 @@ class ReadingTest {
     }
 
     @Test
+    fun splitKeepsAbbreviationsTogether() {
+        val s = Sentences.split("Mr. Fox saw Mrs. Hen. Dr. Brown came too. It was late.")
+        assertEquals(listOf("Mr. Fox saw Mrs. Hen.", "Dr. Brown came too.", "It was late."), s)
+    }
+
+    @Test
     fun splitJoinsLineBreaksInsideParagraph() {
         val s = Sentences.split("I am a hen.\nI live on a farm.\nIt is warm here.")
         assertEquals(3, s.size)

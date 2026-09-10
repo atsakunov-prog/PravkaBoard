@@ -47,7 +47,8 @@ class ClaudeBatch(private val api: ClaudeApi) {
     suspend fun create(apiKey: String, model: String, requests: List<Pair<String, ToolRequest>>): String = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) throw ClaudeException("Сначала вставь API-ключ Anthropic в настройках")
         if (requests.isEmpty()) throw ClaudeException("Пустой пакет")
-        var withFallbacks = true
+        // Серверный fallback в пакетах не поддерживается, поэтому сразу без него; tool_choice при отказе — auto.
+        var withFallbacks = false
         var forceTool = true
         repeat(4) {
             val body = JSONObject().put(
@@ -74,6 +75,7 @@ class ClaudeBatch(private val api: ClaudeApi) {
 
     suspend fun status(apiKey: String, batchId: String): BatchStatus = withContext(Dispatchers.IO) {
         val (code, text) = execute(baseRequest(apiKey, "$BASE/v1/messages/batches/$batchId").get().build())
+        if (code == 404) throw BatchGoneException("Пакет не найден")
         if (code !in 200..299) throw ClaudeException(api.describeError(code, text))
         val o = JSONObject(text)
         val c = o.optJSONObject("request_counts") ?: JSONObject()
@@ -89,6 +91,7 @@ class ClaudeBatch(private val api: ClaudeApi) {
     /** Скачивает итоги (JSONL) и разбирает каждый: toolNames — custom_id → имя инструмента. */
     suspend fun results(apiKey: String, resultsUrl: String, toolNames: Map<String, String>): Map<String, BatchItem> = withContext(Dispatchers.IO) {
         val (code, text) = execute(baseRequest(apiKey, resultsUrl).get().build())
+        if (code == 404) throw BatchGoneException("Итоги пакета больше недоступны")
         if (code !in 200..299) throw ClaudeException(api.describeError(code, text))
         val out = LinkedHashMap<String, BatchItem>()
         for (line in text.lineSequence()) {

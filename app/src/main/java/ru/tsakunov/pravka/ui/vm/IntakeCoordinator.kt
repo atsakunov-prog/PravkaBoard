@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import ru.tsakunov.pravka.api.BatchGoneException
 import ru.tsakunov.pravka.api.BatchItem
 import ru.tsakunov.pravka.api.ClaudeApi
 import ru.tsakunov.pravka.api.ClaudeBatch
@@ -65,6 +66,7 @@ class IntakeCoordinator(
     fun run(uris: List<Uri>, batchMode: Boolean) {
         if (uris.isEmpty() || busy) return
         val s = settings.state.value
+        if (s.apiKey.isBlank()) { _state.value = IntakeState.Error("Сначала вставь API-ключ Anthropic в настройках"); return }
         _state.value = IntakeState.Sorting(uris.size)
         scope.launch {
             try {
@@ -160,15 +162,17 @@ class IntakeCoordinator(
         )
     }
 
-    /** Опрос отправленных пакетов плюс уборка разборов, прерванных закрытием приложения. */
-    fun refresh() {
+    /**
+     * Опрос отправленных пакетов. При запуске приложения (startup = true) ничего идти не может, поэтому все
+     * разборы со статусом «идёт» — это прерванные закрытием приложения: закрываем их с ошибкой, готовые части остаются.
+     */
+    fun refresh(startup: Boolean = false) {
         if (refreshing) return
         refreshing = true
         scope.launch {
             try {
-                val stale = System.currentTimeMillis() - 10 * 60_000L
-                for (job in repo.runningIntakeJobs()) {
-                    if (job.updatedAt < stale && !busy) {
+                if (startup) {
+                    for (job in repo.runningIntakeJobs()) {
                         val parts = IntakePart.listFromJson(job.partsJson).map { if (it.status == IntakePart.PENDING) it.copy(status = IntakePart.ERROR, error = "Разбор прервался: приложение закрыли") else it }
                         finalize(job, parts)
                     }
@@ -200,6 +204,8 @@ class IntakeCoordinator(
                 }
             }
             finalize(job, applied)
+        } catch (e: BatchGoneException) {
+            repo.saveIntakeJob(job.copy(status = IntakeJob.ERROR, error = "Пакет больше недоступен на сервере (итоги хранятся 29 дней)", progress = null))
         } catch (e: Exception) {
             // Сеть или ключ: пакет остаётся в очереди, проверим в следующий раз.
             repo.saveIntakeJob(job.copy(progress = "не удалось проверить: ${e.message ?: e.javaClass.simpleName}"))

@@ -13,7 +13,8 @@ import kotlinx.coroutines.withContext
 
 /** Подготовка фото для отправки в модель: уменьшение, поворот по EXIF, JPEG base64. */
 object Images {
-    private const val MAX_SIDE = 2400
+    // Длинная сторона: API всё равно ужимает изображения до 1568 px, больше — только лишний трафик и память.
+    private const val MAX_SIDE = 1568
 
     /** Тяжёлая работа с растром идёт на IO, чтобы не замораживать интерфейс. */
     suspend fun encodeJpegBase64(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
