@@ -26,7 +26,7 @@ class MatchingTest {
         assertFalse(Matching.matches("hen", listOf("hand")))         // коротким словам нужна точность
         assertFalse(Matching.matches("to do", listOf("today")))
         assertTrue(Matching.matches("warm", listOf("worm")))      // одна ошибка в слове из 4 букв прощается
-        assertFalse(Matching.matches("warm", listOf("want", "farm house cat")))
+        assertFalse(Matching.matches("warm", listOf("want", "wind house cat")))
     }
 
     @Test
