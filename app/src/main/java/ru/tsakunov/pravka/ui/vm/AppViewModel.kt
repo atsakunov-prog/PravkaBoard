@@ -43,6 +43,7 @@ import ru.tsakunov.pravka.domain.ReadingDetail
 import ru.tsakunov.pravka.domain.SentenceResult
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.countWords
+import ru.tsakunov.pravka.ui.components.SpeechInput
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -410,6 +411,17 @@ class AppViewModel(
     }
 
     fun deleteAttempt(id: String) = viewModelScope.launch { repo.deleteAttempt(id) }
+
+    // ---- Микрофон ----
+    /** Распознаватель с настройками телефонного микрофона; освобождать в DisposableEffect экрана. */
+    fun speechInput(context: android.content.Context) = SpeechInput(
+        context,
+        preferPhoneMic = { settings.state.value.phoneMic },
+        pipeUnsupported = { settings.micPipeBroken },
+        onPipeUnsupported = { settings.micPipeBroken = true; showToast("Распознавание не берёт звук с микрофона телефона, слушаем как обычно") },
+    )
+    fun setPhoneMic(on: Boolean) { settings.setPhoneMic(on); if (on) settings.micPipeBroken = false }
+    val micPipeBroken: Boolean get() = settings.micPipeBroken
 
     // ---- Настройки ----
     fun setApiKey(v: String) = settings.setApiKey(v)

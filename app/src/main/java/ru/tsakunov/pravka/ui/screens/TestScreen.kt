@@ -10,10 +10,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.domain.Matching
@@ -40,8 +41,10 @@ import ru.tsakunov.pravka.ui.wordsWord
 
 private sealed interface TestPhase {
     data object Ready : TestPhase
-    /** attempt растёт при каждом перезапуске прослушивания, чтобы эффект точно перезапускался. */
-    data class Listening(val idx: Int, val attempt: Int = 0, val partial: String = "", val hint: String? = null) : TestPhase
+    /** Слово на экране, микрофон выключен: ждём нажатия на кнопку. hint — почему прошлый раз не вышло. */
+    data class Prompt(val idx: Int, val hint: String? = null) : TestPhase
+    /** Микрофон включён по кнопке; второе нажатие заканчивает реплику. */
+    data class Listening(val idx: Int, val partial: String = "") : TestPhase
     data class Checking(val idx: Int, val heard: List<String>) : TestPhase
     data class Correct(val idx: Int, val heard: String) : TestPhase
     data class Wrong(val idx: Int, val heard: String) : TestPhase
@@ -49,50 +52,53 @@ private sealed interface TestPhase {
     data class Error(val idx: Int, val message: String) : TestPhase
 }
 
-/** Контроша: русское слово, микрофон, английский ответ. Ошибка — всё с начала. */
+/**
+ * Контроша: русское слово, ответ по-английски в микрофон. Ошибка — всё с начала.
+ * Микрофон включается кнопкой и выключается второй кнопкой (или сам, когда ребёнок замолчал):
+ * так в запись не попадают разговоры вокруг, а ребёнок сам решает, когда готов.
+ */
 @Composable
 fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val all by remember(listId) { vm.observeItems(listId) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(all) { all.filter { it.en.isNotBlank() && it.ru.isNotBlank() } }
-    val speech = remember { SpeechInput(context) }
+    val speech = remember { vm.speechInput(context) }
     val speaker = rememberSpeaker()
 
     var phase by remember { mutableStateOf<TestPhase>(TestPhase.Ready) }
     var attempts by remember { mutableIntStateOf(1) }
     var startedAt by remember { mutableLongStateOf(0L) }
     var confetti by remember { mutableIntStateOf(0) }
+    var route by remember { mutableStateOf<MicRoute?>(null) }
     var micGranted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         micGranted = granted
-        if (granted) phase = TestPhase.Listening(0) else vm.showToast("Без микрофона контроша не работает")
+        if (granted) phase = TestPhase.Prompt(0) else vm.showToast("Без микрофона контроша не работает")
     }
 
     DisposableEffect(Unit) { onDispose { speech.release() } }
 
+    // Слова урока как подсказка распознавателю: он склоняется к ним, а не к похожим по звучанию.
+    val biasing = remember(items) { items.flatMap { Matching.expectedVariants(it.en) + it.en }.distinct() }
+
     fun listen(idx: Int) {
+        val m = TestPhase.Listening(idx)
+        phase = m
+        route = speech.route()
         speech.start(
             language = "en-US",
+            biasing = biasing,
             onPartial = { p -> (phase as? TestPhase.Listening)?.let { if (it.idx == idx) phase = it.copy(partial = p) } },
             onResult = { heard -> if ((phase as? TestPhase.Listening)?.idx == idx) phase = TestPhase.Checking(idx, heard) },
             onError = { code ->
                 val cur = phase as? TestPhase.Listening ?: return@start
                 if (cur.idx != idx) return@start
-                phase = if (SpeechInput.isRetryable(code)) TestPhase.Listening(idx, attempt = cur.attempt + 1, hint = SpeechInput.describeError(code))
+                phase = if (SpeechInput.isRetryable(code)) TestPhase.Prompt(idx, hint = "Не услышал. Нажми и скажи ещё раз")
                 else TestPhase.Error(idx, SpeechInput.describeError(code))
             },
         )
-    }
-
-    // Запуск прослушивания при входе в Listening (в том числе повтор после «не услышал»).
-    val listening = phase as? TestPhase.Listening
-    LaunchedEffect(listening?.idx, listening?.attempt) {
-        if (listening == null) return@LaunchedEffect
-        if (listening.attempt > 0) delay(600)
-        listen(listening.idx)
     }
 
     // Проверка ответа: сначала локально, для фраз — с запасным судьёй в модели.
@@ -102,6 +108,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
         if (checking == null) return@LaunchedEffect
         val item = items.getOrNull(checking.idx) ?: return@LaunchedEffect
         val heardText = checking.heard.firstOrNull() ?: ""
+        if (checking.heard.all { it.isBlank() }) { phase = TestPhase.Prompt(checking.idx, hint = "Не услышал. Нажми и скажи ещё раз"); return@LaunchedEffect }
         var ok = Matching.matches(item.en, checking.heard)
         if (!ok && Matching.isPhrase(item.en)) ok = vm.judgeAnswer(item.ru, item.en, checking.heard)
         if (ok) phase = TestPhase.Correct(checking.idx, heardText)
@@ -116,7 +123,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
     LaunchedEffect(correct?.idx) {
         if (correct == null) return@LaunchedEffect
         delay(900)
-        if (correct.idx + 1 < items.size) phase = TestPhase.Listening(correct.idx + 1)
+        if (correct.idx + 1 < items.size) phase = TestPhase.Prompt(correct.idx + 1)
         else {
             val duration = SystemClock.elapsedRealtime() - startedAt
             phase = TestPhase.Done(duration)
@@ -129,13 +136,14 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
         if (!speech.available) { vm.showToast("На телефоне нет службы распознавания речи Google"); return }
         attempts = 1
         startedAt = SystemClock.elapsedRealtime()
-        if (micGranted) phase = TestPhase.Listening(0) else permission.launch(Manifest.permission.RECORD_AUDIO)
+        route = speech.route()
+        if (micGranted) phase = TestPhase.Prompt(0) else permission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     fun restart() {
         attempts++
         speech.stop()
-        phase = TestPhase.Listening(0)
+        phase = TestPhase.Prompt(0)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -146,11 +154,8 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                     navigationIcon = { BackIcon { speech.stop(); onBack() } },
                     title = { Text("Контроша", fontWeight = FontWeight.Bold) },
                     actions = {
-                        val idx = when (val p = phase) {
-                            is TestPhase.Listening -> p.idx; is TestPhase.Checking -> p.idx; is TestPhase.Correct -> p.idx
-                            is TestPhase.Wrong -> p.idx; is TestPhase.Error -> p.idx; else -> -1
-                        }
-                        if (idx >= 0) Text("${idx + 1} / ${items.size} · попытка $attempts", color = PravkaColors.Ink2, modifier = Modifier.padding(end = 16.dp))
+                        val idx = phase.index()
+                        if (idx >= 0 && phase !is TestPhase.Done) Text("${idx + 1} / ${items.size} · попытка $attempts", color = PravkaColors.Ink2, modifier = Modifier.padding(end = 16.dp))
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = PravkaColors.Page),
                 )
@@ -158,10 +163,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (items.isEmpty()) { EmptyHint("В уроке нет пар слово–перевод"); return@Column }
-                val idx = when (val p = phase) {
-                    is TestPhase.Listening -> p.idx; is TestPhase.Checking -> p.idx; is TestPhase.Correct -> p.idx
-                    is TestPhase.Wrong -> p.idx; is TestPhase.Error -> p.idx; is TestPhase.Done -> items.size; else -> 0
-                }
+                val idx = when (val p = phase) { is TestPhase.Done -> items.size; TestPhase.Ready -> 0; else -> p.index() }
                 LinearProgressIndicator(
                     progress = { idx.toFloat() / items.size },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp), color = PravkaColors.Ru, trackColor = PravkaColors.Surface2,
@@ -173,7 +175,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                         Text("Контроша по ${wordsWord(items.size)}", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "На экране русское слово, ты говоришь его по-английски. Одна ошибка — и начинаем с первого слова.",
+                            "На экране русское слово. Нажми на микрофон, скажи его по-английски, нажми ещё раз. Одна ошибка — и начинаем с первого слова.",
                             color = PravkaColors.Ink2, textAlign = TextAlign.Center,
                         )
                         Spacer(Modifier.height(24.dp))
@@ -201,13 +203,20 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                         WordCard(item, phase)
                         Spacer(Modifier.height(20.dp))
                         when (p) {
-                            is TestPhase.Listening -> {
-                                MicIndicator(active = true)
+                            is TestPhase.Prompt -> {
+                                MicButton(listening = false, onClick = { listen(p.idx) })
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    p.partial.ifBlank { p.hint ?: "Слушаю…" },
-                                    color = if (p.hint != null && p.partial.isBlank()) PravkaColors.RuText else PravkaColors.Ink2,
-                                    textAlign = TextAlign.Center,
+                                    p.hint ?: "Нажми и скажи по-английски",
+                                    color = if (p.hint != null) PravkaColors.RuText else PravkaColors.Ink2, textAlign = TextAlign.Center,
+                                )
+                            }
+                            is TestPhase.Listening -> {
+                                MicButton(listening = true, onClick = { speech.finish() })
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    p.partial.ifBlank { "Слушаю… Сказал — нажми ещё раз" },
+                                    color = PravkaColors.Ink2, textAlign = TextAlign.Center,
                                 )
                             }
                             is TestPhase.Checking -> {
@@ -228,7 +237,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                                 Spacer(Modifier.height(12.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     SecondaryButton("К уроку", onClick = onBack, modifier = Modifier.weight(1f))
-                                    BigButton("Ещё раз", onClick = { phase = TestPhase.Listening(p.idx) }, modifier = Modifier.weight(1f))
+                                    BigButton("Ещё раз", onClick = { phase = TestPhase.Prompt(p.idx) }, modifier = Modifier.weight(1f))
                                 }
                             }
                             else -> Unit
@@ -237,6 +246,14 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.weight(1f))
                 if (phase !is TestPhase.Ready && phase !is TestPhase.Done) {
+                    route?.let { r ->
+                        Text(
+                            r.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (r.externalName != null && !r.forcedPhoneMic) PravkaColors.GoldText else PravkaColors.Muted,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                     TextButton(onClick = { speech.stop(); phase = TestPhase.Ready }) { Text("Остановить", color = PravkaColors.Muted) }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -244,6 +261,11 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
         }
         ConfettiOverlay(trigger = confetti, modifier = Modifier.fillMaxSize())
     }
+}
+
+private fun TestPhase.index(): Int = when (this) {
+    is TestPhase.Prompt -> idx; is TestPhase.Listening -> idx; is TestPhase.Checking -> idx; is TestPhase.Correct -> idx
+    is TestPhase.Wrong -> idx; is TestPhase.Error -> idx; else -> -1
 }
 
 @Composable
@@ -273,12 +295,18 @@ private fun WordCard(item: WordItem, phase: TestPhase) {
     }
 }
 
+/** Большая круглая кнопка микрофона: серая — нажми и говори, красная с квадратом — говоришь, нажми, когда сказал. */
 @Composable
-private fun MicIndicator(active: Boolean) {
+fun MicButton(listening: Boolean, onClick: () -> Unit, size: Int = 96) {
+    val bg by animateColorAsState(if (listening) PravkaColors.Danger else PravkaColors.Ru, label = "mic")
     Box(
-        Modifier.size(72.dp).background(if (active) PravkaColors.RuSoft else PravkaColors.Surface2, CircleShape),
+        Modifier.size(size.dp).background(bg, CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Mic, contentDescription = null, tint = if (active) PravkaColors.Ru else PravkaColors.Muted, modifier = Modifier.size(34.dp))
+        Icon(
+            if (listening) Icons.Filled.Stop else Icons.Filled.Mic,
+            contentDescription = if (listening) "Сказал" else "Говорить",
+            tint = Color.White, modifier = Modifier.size((size * 0.45f).dp),
+        )
     }
 }

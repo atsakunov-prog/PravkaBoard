@@ -2,11 +2,22 @@ package ru.tsakunov.pravka.ui.components
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceInfo
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -44,19 +55,65 @@ fun rememberSpeaker(): Speaker {
     return speaker
 }
 
+/** Что сейчас слушает распознавание: телефон или внешний микрофон (наушники). */
+data class MicRoute(
+    /** Есть ли подключённый внешний вход (Bluetooth-наушники, гарнитура). */
+    val externalName: String?,
+    /** Удалось ли завернуть распознавание на встроенный микрофон телефона. */
+    val forcedPhoneMic: Boolean,
+) {
+    val label: String
+        get() = when {
+            externalName == null -> "микрофон телефона"
+            forcedPhoneMic -> "микрофон телефона (наушники «$externalName» не слушаем)"
+            else -> "микрофон наушников «$externalName»: лучше отключить Bluetooth или снять их"
+        }
+}
+
 /**
  * Обёртка над SpeechRecognizer: слушает одну реплику и отдаёт варианты расшифровки.
  * Распознаватель создаётся один раз и переиспользуется (cancel между репликами):
  * пересоздание на каждую реплику даёт ERROR_RECOGNIZER_BUSY на Android 12–14.
+ *
+ * Телефонный микрофон при наушниках: когда подключён Bluetooth-вход, система отдаёт распознаванию микрофон
+ * наушников, а ребёнок говорит в телефон. На Android 13+ мы сами пишем звук со встроенного микрофона
+ * (AudioRecord с предпочтительным устройством) и отдаём его распознавателю через EXTRA_AUDIO_SOURCE.
+ * Если распознаватель источник не читает, за полторы секунды это видно по переполненной трубе:
+ * запись останавливается, флаг «не поддерживается» запоминается через onPipeUnsupported.
  */
-class SpeechInput(private val context: Context) {
+class SpeechInput(
+    private val context: Context,
+    private val preferPhoneMic: () -> Boolean = { true },
+    private val pipeUnsupported: () -> Boolean = { false },
+    private val onPipeUnsupported: () -> Unit = {},
+) {
     private var recognizer: SpeechRecognizer? = null
+    private var feeder: MicFeeder? = null
+    private val audio: AudioManager? get() = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
     val available: Boolean get() = SpeechRecognizer.isRecognitionAvailable(context)
+
+    /** Сейчас звук идёт через нашу трубу со встроенного микрофона. */
+    val usingPipe: Boolean get() = feeder != null
+
+    /** Подключённый внешний вход (наушники), если есть. */
+    fun externalInput(): AudioDeviceInfo? = audio?.getDevices(AudioManager.GET_DEVICES_INPUTS)?.firstOrNull { d ->
+        d.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || d.type == AudioDeviceInfo.TYPE_WIRED_HEADSET || d.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+            (Build.VERSION.SDK_INT >= 31 && d.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+    }
+
+    private fun builtInMic(): AudioDeviceInfo? = audio?.getDevices(AudioManager.GET_DEVICES_INPUTS)?.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+
+    private fun canForcePhoneMic(): Boolean =
+        Build.VERSION.SDK_INT >= 33 && preferPhoneMic() && !pipeUnsupported() && externalInput() != null && builtInMic() != null
+
+    /** Куда сейчас пойдёт звук, для подписи под микрофоном. */
+    fun route(): MicRoute = MicRoute(externalInput()?.productName?.toString()?.ifBlank { "наушники" }, canForcePhoneMic())
 
     /**
      * silenceMs — сколько тишины считать концом реплики (подсказка движку; для чтения текста ребёнком
      * ставим больше, чем для одного слова). onBegin/onEnd — моменты начала и конца речи по данным движка.
+     * biasing — слова, к которым распознавателю стоит склоняться (Android 13+, движок может игнорировать).
      */
     fun start(
         language: String,
@@ -66,9 +123,11 @@ class SpeechInput(private val context: Context) {
         silenceMs: Long? = null,
         onBegin: () -> Unit = {},
         onEnd: () -> Unit = {},
+        biasing: List<String> = emptyList(),
     ) {
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { recognizer = it }
         runCatching { r.cancel() }
+        stopFeeder()
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() = onBegin()
@@ -76,8 +135,9 @@ class SpeechInput(private val context: Context) {
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() = onEnd()
             override fun onEvent(eventType: Int, params: Bundle?) {}
-            override fun onError(error: Int) = onError(error)
+            override fun onError(error: Int) { stopFeeder(); onError(error) }
             override fun onResults(results: Bundle?) {
+                stopFeeder()
                 onResult(results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.toList() ?: emptyList())
             }
             override fun onPartialResults(partialResults: Bundle?) {
@@ -96,19 +156,46 @@ class SpeechInput(private val context: Context) {
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
             }
+            if (Build.VERSION.SDK_INT >= 33 && biasing.isNotEmpty()) {
+                putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, ArrayList(biasing.distinct().take(200)))
+            }
+        }
+        if (canForcePhoneMic()) {
+            val f = MicFeeder.open(builtInMic(), onUnsupported = { stopFeeder(); onPipeUnsupported() })
+            if (f != null) {
+                feeder = f
+                intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, f.readEnd)
+                intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
+                intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+                intent.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, MicFeeder.SAMPLE_RATE)
+            }
         }
         r.startListening(intent)
+        feeder?.startWriting()
     }
 
-    /** Прервать текущее прослушивание, распознаватель остаётся готовым к следующему. */
+    /** Закончить реплику и получить результат (кнопка «сказал»). */
+    fun finish() {
+        feeder?.finishInput()
+        recognizer?.let { runCatching { it.stopListening() } }
+    }
+
+    /** Прервать текущее прослушивание без результата, распознаватель остаётся готовым к следующему. */
     fun stop() {
+        stopFeeder()
         recognizer?.let { runCatching { it.cancel() } }
     }
 
     /** Освободить распознаватель при уходе с экрана. */
     fun release() {
+        stopFeeder()
         recognizer?.let { runCatching { it.cancel(); it.destroy() } }
         recognizer = null
+    }
+
+    private fun stopFeeder() {
+        feeder?.close()
+        feeder = null
     }
 
     companion object {
@@ -126,5 +213,90 @@ class SpeechInput(private val context: Context) {
         fun isRetryable(code: Int): Boolean =
             code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
                 code == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || code == SpeechRecognizer.ERROR_CLIENT
+    }
+}
+
+/**
+ * Пишет звук со встроенного микрофона в трубу, читаемую распознавателем.
+ * Запись 16 кГц, моно, PCM16 — формат по умолчанию для EXTRA_AUDIO_SOURCE.
+ */
+private class MicFeeder private constructor(
+    private val record: AudioRecord,
+    val readEnd: ParcelFileDescriptor,
+    private val writeEnd: ParcelFileDescriptor,
+    private val onUnsupported: () -> Unit,
+) {
+    @Volatile private var running = false
+    private var thread: Thread? = null
+
+    fun startWriting() {
+        if (running) return
+        running = true
+        thread = Thread({ loop() }, "pravka-mic-feeder").also { it.start() }
+    }
+
+    private fun loop() {
+        val buf = ByteArray(SAMPLE_RATE / 10 * 2) // 100 мс
+        val fd = writeEnd.fileDescriptor
+        var blockedSince = 0L
+        try {
+            runCatching { Os.fcntlInt(fd, OsConstants.F_SETFL, OsConstants.O_NONBLOCK) }
+            record.startRecording()
+            while (running) {
+                val n = record.read(buf, 0, buf.size)
+                if (n <= 0) { if (n < 0) break else continue }
+                var off = 0
+                while (off < n && running) {
+                    try {
+                        off += Os.write(fd, buf, off, n - off)
+                        blockedSince = 0L
+                    } catch (e: ErrnoException) {
+                        if (e.errno != OsConstants.EAGAIN) throw e
+                        // Труба полна: распознаватель её не читает. Полторы секунды — и сдаёмся.
+                        val now = SystemClock.elapsedRealtime()
+                        if (blockedSince == 0L) blockedSince = now
+                        if (now - blockedSince > UNSUPPORTED_AFTER_MS) { running = false; onUnsupported(); return }
+                        Thread.sleep(20)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Запись сорвалась: распознаватель просто получит конец потока.
+        } finally {
+            runCatching { record.stop() }
+            runCatching { record.release() }
+            runCatching { writeEnd.close() }
+        }
+    }
+
+    /** Конец реплики по кнопке: закрываем запись, распознаватель видит конец потока. */
+    fun finishInput() {
+        running = false
+    }
+
+    fun close() {
+        running = false
+        runCatching { thread?.join(300) }
+        runCatching { writeEnd.close() }
+        runCatching { readEnd.close() }
+    }
+
+    companion object {
+        const val SAMPLE_RATE = 16_000
+        private const val UNSUPPORTED_AFTER_MS = 1_500L
+
+        fun open(device: AudioDeviceInfo?, onUnsupported: () -> Unit): MicFeeder? {
+            if (device == null) return null
+            return try {
+                val minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                val record = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuf, SAMPLE_RATE * 2))
+                if (record.state != AudioRecord.STATE_INITIALIZED) { record.release(); return null }
+                if (!record.setPreferredDevice(device)) { record.release(); return null }
+                val pipe = ParcelFileDescriptor.createPipe()
+                MicFeeder(record, pipe[0], pipe[1], onUnsupported)
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 }

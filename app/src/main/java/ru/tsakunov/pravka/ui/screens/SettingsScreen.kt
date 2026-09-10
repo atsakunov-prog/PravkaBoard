@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -127,6 +128,21 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 )
             }
 
+            PravkaCard {
+                Text("Микрофон", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Слушать телефон, а не наушники", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (vm.micPipeBroken) "На этом телефоне распознавание не берёт звук с микрофона телефона при наушниках: перед контрошей лучше отключить Bluetooth."
+                            else "Когда подключены Bluetooth-наушники, Android отдаёт распознаванию их микрофон, а Боря говорит в телефон. Эта настройка заворачивает звук со встроенного микрофона (Android 13+).",
+                            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
+                        )
+                    }
+                    Switch(checked = settings.phoneMic, onCheckedChange = { vm.setPhoneMic(it) })
+                }
+            }
             PravkaCard {
                 Text("Данные", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))

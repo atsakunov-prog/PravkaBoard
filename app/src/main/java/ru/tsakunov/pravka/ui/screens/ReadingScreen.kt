@@ -80,8 +80,10 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
     val story by vm.observeStoryById(textId).collectAsStateWithLifecycle(initialValue = null)
     val runs by vm.readingRuns.collectAsStateWithLifecycle()
     val speaker = rememberSpeaker()
-    val speech = remember { SpeechInput(context) }
+    val speech = remember { vm.speechInput(context) }
     val scope = rememberCoroutineScope()
+    var route by remember { mutableStateOf<MicRoute?>(null) }
+    var lastPartialAt by remember { mutableLongStateOf(0L) }
 
     val readable = text?.let { Readable(it.id, it.title, it.textEn, it.textRu, it.words, it.createdAt, false) }
         ?: story?.let { Readable(it.id, it.title, it.textEn, it.textRu, countWords(it.textEn), it.createdAt, true) }
@@ -111,6 +113,7 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
         repeat(sentences.size) { i -> drafts.add(SentenceDraft(sentences[i], "", "", 0L, enSkipped = false, ruSkipped = false)) }
         sessionStart = SystemClock.elapsedRealtime()
         partial = ""
+        route = speech.route()
         phase = ReadPhase.Mic(0, Step.READ)
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -170,10 +173,14 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
         speechBegan = 0L
         speechEnded = 0L
         listenStart = SystemClock.elapsedRealtime()
+        lastPartialAt = 0L
+        val sentence = sentences.getOrNull(m.idx) ?: ""
         speech.start(
             language = if (m.step == Step.READ) "en-US" else "ru-RU",
             silenceMs = if (m.step == Step.READ) 2500L else 1800L,
-            onPartial = { partial = it },
+            // Слова предложения как подсказка распознавателю на английском шаге.
+            biasing = if (m.step == Step.READ) sentence.split(Regex("[^\\p{L}']+")).filter { it.length > 1 } else emptyList(),
+            onPartial = { partial = it; lastPartialAt = SystemClock.elapsedRealtime() },
             onBegin = { speechBegan = SystemClock.elapsedRealtime() },
             onEnd = { speechEnded = SystemClock.elapsedRealtime() },
             onResult = { results ->
@@ -196,6 +203,20 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
                 else phase = m.copy(hint = SpeechInput.describeError(code), error = true)
             },
         )
+        route = speech.route()
+        // Когда звук идёт через нашу трубу, конец реплики по тишине страхуем сами: если после начала речи
+        // расшифровка не меняется дольше порога, закрываем поток и получаем результат.
+        if (speech.usingPipe) {
+            val quiet = if (m.step == Step.READ) 2800L else 2000L
+            while (phase == m) {
+                delay(300)
+                val now = SystemClock.elapsedRealtime()
+                val spoke = speechBegan > 0 || lastPartialAt > 0
+                val since = now - maxOf(lastPartialAt, speechBegan)
+                if (spoke && since > quiet) { speech.finish(); break }
+                if (!spoke && now - listenStart > 12_000L) { speech.finish(); break }
+            }
+        }
     }
 
     fun stopTimer() {
@@ -272,6 +293,8 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
                             }
                             is ReadPhase.Mic -> MicPanel(
                                 m = p, sentence = sentences.getOrNull(p.idx) ?: "", total = sentences.size, partial = partial, elapsed = elapsed,
+                                route = route,
+                                onSaid = { speech.finish() },
                                 onRetry = { speech.stop(); phase = p.copy(attempt = p.attempt + 1, hint = null, error = false) },
                                 onSkip = {
                                     speech.stop()
@@ -378,8 +401,8 @@ private fun ReadyPanel(
 
 @Composable
 private fun MicPanel(
-    m: ReadPhase.Mic, sentence: String, total: Int, partial: String, elapsed: Long,
-    onRetry: () -> Unit, onSkip: () -> Unit, onFinish: () -> Unit, onSpeak: () -> Unit,
+    m: ReadPhase.Mic, sentence: String, total: Int, partial: String, elapsed: Long, route: MicRoute?,
+    onSaid: () -> Unit, onRetry: () -> Unit, onSkip: () -> Unit, onFinish: () -> Unit, onSpeak: () -> Unit,
 ) {
     val reading = m.step == Step.READ
     val accent by animateColorAsState(if (reading) PravkaColors.En else PravkaColors.Ru, label = "accent")
@@ -409,9 +432,12 @@ private fun MicPanel(
             Text(
                 partial.ifBlank { if (m.attempt > 0) "Не услышал, скажи ещё раз" else "Слушаю…" },
                 style = MaterialTheme.typography.bodyMedium, color = if (partial.isBlank()) PravkaColors.Muted else PravkaColors.Ink2,
-                maxLines = 2,
+                maxLines = 2, modifier = Modifier.weight(1f),
             )
         }
+        Spacer(Modifier.height(8.dp))
+        // Конец реплики по кнопке: не ждём, пока движок сам решит, что ребёнок замолчал.
+        BigButton(if (reading) "Прочитал" else "Сказал", onClick = onSaid, container = accent)
     } else {
         Text(m.hint, color = if (m.error) PravkaColors.Danger else PravkaColors.Ink2, textAlign = TextAlign.Center)
         Spacer(Modifier.height(8.dp))
@@ -426,6 +452,13 @@ private fun MicPanel(
         }
         SecondaryButton(if (reading) "Пропустить" else "Без перевода", onClick = onSkip, modifier = Modifier.weight(1f))
         SecondaryButton("Закончить", onClick = onFinish, modifier = Modifier.weight(1f))
+    }
+    route?.let { r ->
+        Spacer(Modifier.height(6.dp))
+        Text(
+            r.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center,
+            color = if (r.externalName != null && !r.forcedPhoneMic) PravkaColors.GoldText else PravkaColors.Muted,
+        )
     }
 }
 

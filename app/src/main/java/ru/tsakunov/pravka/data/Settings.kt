@@ -14,6 +14,8 @@ data class SettingsState(
     val metric: Metric = Metric.SEC_PER_LETTER,
     /** Разбор всей домашки через Message Batches: вдвое дешевле, ответ не сразу. */
     val batchMode: Boolean = false,
+    /** При подключённых наушниках распознавание слушает микрофон телефона, а не наушников. */
+    val phoneMic: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_MODEL = "claude-opus-5"
@@ -33,7 +35,18 @@ class Settings(context: Context) {
             ?: SettingsState.DEFAULT_MODEL,
         metric = if (prefs.getString(KEY_METRIC, "spl") == "lpm") Metric.LETTERS_PER_MIN else Metric.SEC_PER_LETTER,
         batchMode = prefs.getBoolean(KEY_BATCH, false),
+        phoneMic = prefs.getBoolean(KEY_PHONE_MIC, true),
     )
+
+    fun setPhoneMic(on: Boolean) {
+        prefs.edit().putBoolean(KEY_PHONE_MIC, on).apply()
+        _state.value = read()
+    }
+
+    /** Распознаватель на этом телефоне не читает внешний источник звука: больше не пробуем. */
+    var micPipeBroken: Boolean
+        get() = prefs.getBoolean(KEY_MIC_PIPE_BROKEN, false)
+        set(v) = prefs.edit().putBoolean(KEY_MIC_PIPE_BROKEN, v).apply()
 
     fun setBatchMode(on: Boolean) {
         prefs.edit().putBoolean(KEY_BATCH, on).apply()
@@ -72,5 +85,7 @@ class Settings(context: Context) {
         const val KEY_SEEDED_V1 = "seeded_v1"
         const val KEY_SEED_VERSION = "seed_version"
         const val KEY_BATCH = "batch_mode"
+        const val KEY_PHONE_MIC = "phone_mic"
+        const val KEY_MIC_PIPE_BROKEN = "mic_pipe_broken"
     }
 }
