@@ -30,7 +30,7 @@ data class Readable(val id: String, val title: String, val textEn: String, val t
 
 /** Вкладка «Текст»: страницы книжки и рассказы, у каждого лучшая скорость. */
 @Composable
-fun ReadingListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -> Unit) {
+fun ReadingListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onIntake: () -> Unit, onTab: (Tab) -> Unit) {
     val texts by vm.readingTexts.collectAsStateWithLifecycle()
     val stories by vm.allStories.collectAsStateWithLifecycle()
     val runs by vm.readingRuns.collectAsStateWithLifecycle()
@@ -54,6 +54,7 @@ fun ReadingListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -
         topBar = {
             TopAppBar(
                 title = { Text("Текст", fontWeight = FontWeight.Bold) },
+                actions = { IntakeIcon(onIntake) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PravkaColors.Page),
             )
         },

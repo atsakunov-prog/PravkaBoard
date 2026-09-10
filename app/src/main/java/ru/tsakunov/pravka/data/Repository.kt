@@ -22,6 +22,7 @@ class Repository(
     private val grammar get() = db.grammarDao()
     private val reading get() = db.readingDao()
     private val storyList get() = db.storyListDao()
+    private val intake get() = db.intakeDao()
 
     // ---- Наблюдение ----
     fun observeLists(): Flow<List<WordListWithCount>> = lists.observeLists()
@@ -287,6 +288,15 @@ class Repository(
             attempts.insertAll(Seed.attempts())
         }
     }
+
+    // ---- Разбор всей домашки ----
+    fun observeIntakeJobs(): Flow<List<IntakeJob>> = intake.observeAll()
+    suspend fun getIntakeJob(id: String): IntakeJob? = intake.get(id)
+    suspend fun queuedIntakeJobs(): List<IntakeJob> = intake.queued()
+    suspend fun runningIntakeJobs(): List<IntakeJob> = intake.running()
+    suspend fun saveIntakeJob(job: IntakeJob) = intake.upsert(job.copy(updatedAt = System.currentTimeMillis()))
+    suspend fun deleteIntakeJob(id: String) = intake.delete(id)
+    fun newIntakeId(): String = newId()
 
     private fun newId() = UUID.randomUUID().toString()
 }

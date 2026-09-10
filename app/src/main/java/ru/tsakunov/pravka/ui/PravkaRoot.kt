@@ -24,11 +24,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.data.Lang
+import ru.tsakunov.pravka.domain.IntakeKind
 import ru.tsakunov.pravka.ui.components.Tab
 import ru.tsakunov.pravka.ui.screens.GrammarDrillScreen
 import ru.tsakunov.pravka.ui.screens.GrammarListScreen
 import ru.tsakunov.pravka.ui.screens.GrammarSetScreen
 import ru.tsakunov.pravka.ui.screens.HomeScreen
+import ru.tsakunov.pravka.ui.screens.IntakeScreen
 import ru.tsakunov.pravka.ui.screens.ReadingListScreen
 import ru.tsakunov.pravka.ui.screens.ReadingScreen
 import ru.tsakunov.pravka.ui.screens.HomeworkListScreen
@@ -54,6 +56,7 @@ object Routes {
     const val TEXTS = "texts"
     const val PROGRESS = "progress"
     const val SETTINGS = "settings"
+    const val INTAKE = "intake"
     const val LIST = "list/{listId}"
     const val PRACTICE = "practice/{listId}/{itemId}/{lang}"
     const val WORDS_HUB = "words/{listId}"
@@ -115,14 +118,31 @@ fun PravkaRoot(app: PravkaApp) {
                         onOpenList = { nav.navigate(Routes.list(it)) },
                         onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                         onOpenProgress = { nav.navigate(Routes.PROGRESS) },
+                        onIntake = { nav.navigate(Routes.INTAKE) },
                         onTab = { nav.switchTab(it) },
+                    )
+                }
+                composable(Routes.INTAKE) {
+                    IntakeScreen(
+                        vm = vm,
+                        onBack = { nav.popBackStack() },
+                        onOpenPart = { kind, id ->
+                            nav.navigate(
+                                when (kind) {
+                                    IntakeKind.VOCABULARY -> Routes.list(id)
+                                    IntakeKind.GRAMMAR -> Routes.grammarSet(id)
+                                    IntakeKind.EXERCISE -> Routes.homework(id)
+                                    IntakeKind.READING -> Routes.reading(id)
+                                },
+                            )
+                        },
                     )
                 }
                 composable(Routes.PROGRESS) {
                     ProgressScreen(vm = vm, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.WORDS) {
-                    WordsScreen(vm = vm, onOpenHub = { nav.navigate(Routes.wordsHub(it)) }, onTab = { nav.switchTab(it) })
+                    WordsScreen(vm = vm, onOpenHub = { nav.navigate(Routes.wordsHub(it)) }, onIntake = { nav.navigate(Routes.INTAKE) }, onTab = { nav.switchTab(it) })
                 }
                 composable(Routes.WORDS_HUB) { entry ->
                     val listId = entry.arguments?.getString("listId") ?: return@composable
@@ -156,7 +176,7 @@ fun PravkaRoot(app: PravkaApp) {
                     StoryScreen(vm = vm, listId = listId, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.GRAMMAR) {
-                    GrammarListScreen(vm = vm, onOpen = { nav.navigate(Routes.grammarSet(it)) }, onTab = { nav.switchTab(it) })
+                    GrammarListScreen(vm = vm, onOpen = { nav.navigate(Routes.grammarSet(it)) }, onIntake = { nav.navigate(Routes.INTAKE) }, onTab = { nav.switchTab(it) })
                 }
                 composable(Routes.GRAMMAR_SET) { entry ->
                     val id = entry.arguments?.getString("setId") ?: return@composable
@@ -168,14 +188,14 @@ fun PravkaRoot(app: PravkaApp) {
                     GrammarDrillScreen(vm = vm, setId = id, ruleIndex = ruleIndex, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.HOMEWORK) {
-                    HomeworkListScreen(vm = vm, onOpen = { nav.navigate(Routes.homework(it)) }, onTab = { nav.switchTab(it) })
+                    HomeworkListScreen(vm = vm, onOpen = { nav.navigate(Routes.homework(it)) }, onIntake = { nav.navigate(Routes.INTAKE) }, onTab = { nav.switchTab(it) })
                 }
                 composable(Routes.HOMEWORK_ITEM) { entry ->
                     val id = entry.arguments?.getString("homeworkId") ?: return@composable
                     HomeworkScreen(vm = vm, homeworkId = id, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.TEXTS) {
-                    ReadingListScreen(vm = vm, onOpen = { nav.navigate(Routes.reading(it)) }, onTab = { nav.switchTab(it) })
+                    ReadingListScreen(vm = vm, onOpen = { nav.navigate(Routes.reading(it)) }, onIntake = { nav.navigate(Routes.INTAKE) }, onTab = { nav.switchTab(it) })
                 }
                 composable(Routes.READING_ITEM) { entry ->
                     val id = entry.arguments?.getString("textId") ?: return@composable

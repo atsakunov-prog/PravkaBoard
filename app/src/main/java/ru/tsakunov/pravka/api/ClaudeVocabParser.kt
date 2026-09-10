@@ -11,7 +11,11 @@ data class ParsedVocabulary(val title: String, val items: List<ParsedItem>)
 /** Разбор фотографий страницы словаря через Claude Opus. */
 class ClaudeVocabParser(private val context: Context, private val api: ClaudeApi) {
 
-    suspend fun parse(images: List<Uri>, apiKey: String, model: String): ParsedVocabulary {
+    suspend fun parse(images: List<Uri>, apiKey: String, model: String): ParsedVocabulary =
+        fromToolInput(api.callTool(apiKey, model, request(images)))
+
+    /** Запрос без отправки: для пакетной обработки. */
+    suspend fun request(images: List<Uri>): ToolRequest {
         if (images.isEmpty()) throw ClaudeException("Нет фотографий")
         val content = JSONArray()
         for (uri in images) content.put(ClaudeApi.imageBlock(Images.encodeJpegBase64(context, uri)))
@@ -21,11 +25,10 @@ class ClaudeVocabParser(private val context: Context, private val api: ClaudeApi
                     "и сохрани их инструментом save_vocabulary. Сохраняй порядок как на странице.",
             ),
         )
-        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, content, tool())
-        return fromToolInput(input)
+        return ToolRequest(SYSTEM_PROMPT, content, tool())
     }
 
-    private fun fromToolInput(input: JSONObject): ParsedVocabulary {
+    fun fromToolInput(input: JSONObject): ParsedVocabulary {
         val items = ArrayList<ParsedItem>()
         val arr = input.optJSONArray("items") ?: JSONArray()
         for (i in 0 until arr.length()) {

@@ -13,6 +13,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.api.ClaudeApi
+import ru.tsakunov.pravka.api.ClaudeBatch
+import ru.tsakunov.pravka.api.ClaudeSorter
 import ru.tsakunov.pravka.api.ClaudeException
 import ru.tsakunov.pravka.api.ClaudeGrammar
 import ru.tsakunov.pravka.api.ClaudeReading
@@ -97,7 +99,14 @@ class AppViewModel(
     private val grammarBuilder: ClaudeGrammar,
     private val readingExtractor: ClaudeReading,
     private val readingJudge: ClaudeReadingJudge,
+    api: ClaudeApi,
+    batch: ClaudeBatch,
+    sorter: ClaudeSorter,
 ) : ViewModel() {
+
+    // ---- Вся домашка одним пакетом фото ----
+    val intake = IntakeCoordinator(viewModelScope, repo, settings, api, batch, sorter, parser, grammarBuilder, homeworkChecker, readingExtractor)
+    fun setBatchMode(on: Boolean) = settings.setBatchMode(on)
 
     // ---- Грамматика ----
     val grammarSets = repo.observeGrammarSets().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -272,6 +281,8 @@ class AppViewModel(
         // Тихая проверка не чаще раза в 6 часов; результат виден как баннер на главном экране.
         val now = System.currentTimeMillis()
         if (now - settings.lastUpdateCheck > 6 * 60 * 60 * 1000L) checkUpdates(silent = true)
+        // Отправленные пакеты проверяем при каждом запуске.
+        intake.refresh()
     }
 
     fun checkUpdates(silent: Boolean = false) {
@@ -411,6 +422,7 @@ class AppViewModel(
                     app.repository, app.settings, ClaudeVocabParser(app, api), Updater(app),
                     ClaudeStory(api), ClaudeJudge(api), ClaudeHomework(app, api),
                     ClaudeGrammar(app, api), ClaudeReading(app, api), ClaudeReadingJudge(api),
+                    api, ClaudeBatch(api), ClaudeSorter(app, api),
                 ) as T
             }
     }

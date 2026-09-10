@@ -33,6 +33,7 @@ fun HomeScreen(
     onOpenList: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenProgress: () -> Unit,
+    onIntake: () -> Unit,
     onTab: (Tab) -> Unit,
 ) {
     val lists by vm.lists.collectAsStateWithLifecycle()
@@ -48,6 +49,7 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("Гармошка", fontWeight = FontWeight.Bold) },
                 actions = {
+                    IntakeIcon(onIntake)
                     IconButton(onClick = onOpenProgress) { Icon(Icons.Filled.ShowChart, contentDescription = "Прогресс") }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Настройки") }
                 },

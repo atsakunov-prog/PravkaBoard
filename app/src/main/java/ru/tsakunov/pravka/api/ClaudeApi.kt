@@ -21,6 +21,18 @@ class ClaudeException(message: String) : Exception(message)
  * Запрос собирается вручную поверх OkHttp: официальный Java SDK не заявлен для Android
  * и тянет ~27 МБ зависимостей (Jackson, kotlin-reflect, jsonschema-generator).
  */
+/** Один вызов инструмента: системный промпт, содержимое сообщения (текст и фото), схема инструмента. */
+class ToolRequest(
+    val system: String,
+    val content: JSONArray,
+    val tool: JSONObject,
+    val maxTokens: Int = 16000,
+    val effort: String? = null,
+    val timeoutSec: Long = 180,
+) {
+    val toolName: String get() = tool.getString("name")
+}
+
 class ClaudeApi {
 
     private val http = OkHttpClient.Builder()
@@ -43,24 +55,30 @@ class ClaudeApi {
         maxTokens: Int = 16000,
         effort: String? = null,
         timeoutSec: Long = 180,
-    ): JSONObject = withContext(Dispatchers.IO) {
+    ): JSONObject = callTool(apiKey, model, ToolRequest(system, content, tool, maxTokens, effort, timeoutSec))
+
+    suspend fun callTool(apiKey: String, model: String, req: ToolRequest): JSONObject = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) throw ClaudeException("Сначала вставь API-ключ Anthropic в настройках")
-        val toolName = tool.getString("name")
-        val messages = JSONArray().put(JSONObject().put("role", "user").put("content", content))
         // 1) fallbacks + принудительный инструмент; 2) без beta fallbacks, если она недоступна аккаунту;
-        // 3) tool_choice auto, если модель (Fable 5.1) не принимает принудительный вызов.
+        // 3) tool_choice auto, если модель не принимает принудительный вызов.
         var withFallbacks = true
         var forceTool = true
         var text: String? = null
         for (i in 0 until 4) {
-            val body = buildBody(model, system, messages, tool, maxTokens, effort, withFallbacks, forceTool)
-            when (val r = send(body, apiKey, withFallbacks, forceTool, timeoutSec)) {
+            val body = requestBody(model, req, withFallbacks, forceTool)
+            when (val r = send(body, apiKey, withFallbacks, forceTool, req.timeoutSec)) {
                 is SendResult.Ok -> { text = r.body; break }
                 SendResult.RetryWithoutFallbacks -> withFallbacks = false
                 SendResult.RetryWithAutoTool -> forceTool = false
             }
         }
-        parseToolInput(text ?: throw ClaudeException("Пустой ответ сервера"), toolName)
+        parseToolInput(text ?: throw ClaudeException("Пустой ответ сервера"), req.toolName)
+    }
+
+    /** Тело запроса Messages API для одного вызова инструмента; используется и в пакетах (Message Batches). */
+    fun requestBody(model: String, req: ToolRequest, withFallbacks: Boolean, forceTool: Boolean): JSONObject {
+        val messages = JSONArray().put(JSONObject().put("role", "user").put("content", req.content))
+        return buildBody(model, req.system, messages, req.tool, req.maxTokens, req.effort, withFallbacks, forceTool)
     }
 
     private sealed interface SendResult {
@@ -94,7 +112,7 @@ class ClaudeApi {
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
             .post(body.toString().toRequestBody("application/json".toMediaType()))
-        if (withFallbacks) builder.header("anthropic-beta", "server-side-fallback-2026-07-01")
+        if (withFallbacks) builder.header("anthropic-beta", FALLBACK_BETA)
 
         val client = if (timeoutSec == 180L) http else http.newBuilder().readTimeout(timeoutSec, TimeUnit.SECONDS).build()
         val response = try {
@@ -113,7 +131,7 @@ class ClaudeApi {
         }
     }
 
-    private fun describeError(code: Int, body: String): String {
+    fun describeError(code: Int, body: String): String {
         val apiMessage = runCatching { JSONObject(body).getJSONObject("error").getString("message") }.getOrNull()
         return when (code) {
             401 -> "API-ключ не подходит. Проверь его в настройках."
@@ -126,8 +144,10 @@ class ClaudeApi {
         }
     }
 
-    private fun parseToolInput(text: String, toolName: String): JSONObject {
-        val root = JSONObject(text)
+    private fun parseToolInput(text: String, toolName: String): JSONObject = parseToolMessage(JSONObject(text), toolName)
+
+    /** Из ответа Messages API (объект message) достаёт input вызванного инструмента. */
+    fun parseToolMessage(root: JSONObject, toolName: String): JSONObject {
         when (root.optString("stop_reason")) {
             "refusal" -> throw ClaudeException("Модель отказалась выполнять запрос. Попробуй ещё раз или переснять фото.")
             "max_tokens" -> throw ClaudeException("Ответ модели оборвался: слишком много материала за один раз.")
@@ -152,6 +172,7 @@ class ClaudeApi {
 
     companion object {
         const val DEFAULT_MODEL = "claude-opus-5"
+        const val FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
         fun textBlock(text: String): JSONObject = JSONObject().put("type", "text").put("text", text)
 

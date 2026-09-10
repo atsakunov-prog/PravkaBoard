@@ -3,21 +3,29 @@ package ru.tsakunov.pravka.api
 import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
+import org.json.JSONObject
 
 data class ExtractedText(val title: String, val textEn: String, val textRu: String)
 
 /** Страницы книжки → текст для чтения на время плюс перевод. */
 class ClaudeReading(private val context: Context, private val api: ClaudeApi) {
 
-    suspend fun extract(images: List<Uri>, apiKey: String, model: String): ExtractedText {
+    suspend fun extract(images: List<Uri>, apiKey: String, model: String): ExtractedText =
+        fromToolInput(api.callTool(apiKey, model, request(images)))
+
+    fun fromToolInput(input: JSONObject): ExtractedText {
+        val en = input.optString("text_en").trim()
+        if (en.isEmpty()) throw ClaudeException("На фото не нашлось текста. Сними страницу ближе.")
+        return ExtractedText(input.optString("title").trim().ifBlank { "Текст" }, en, input.optString("text_ru").trim())
+    }
+
+    /** Запрос без отправки: для пакетной обработки. */
+    suspend fun request(images: List<Uri>): ToolRequest {
         if (images.isEmpty()) throw ClaudeException("Нет фотографий")
         val content = JSONArray()
         for (uri in images) content.put(ClaudeApi.imageBlock(Images.encodeJpegBase64(context, uri)))
         content.put(ClaudeApi.textBlock("На фото — страницы детской книжки на английском. Перепиши текст для чтения вслух и сохрани инструментом save_reading_text."))
-        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, content, tool())
-        val en = input.optString("text_en").trim()
-        if (en.isEmpty()) throw ClaudeException("На фото не нашлось текста. Сними страницу ближе.")
-        return ExtractedText(input.optString("title").trim().ifBlank { "Текст" }, en, input.optString("text_ru").trim())
+        return ToolRequest(SYSTEM_PROMPT, content, tool())
     }
 
     private fun tool() = ClaudeApi.tool(

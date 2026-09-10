@@ -9,15 +9,22 @@ import ru.tsakunov.pravka.domain.GrammarSetContent
 /** Страница с правилом → уровни тренажёра с карточками «слово → форма». */
 class ClaudeGrammar(private val context: Context, private val api: ClaudeApi) {
 
-    suspend fun build(images: List<Uri>, apiKey: String, model: String): GrammarSetContent {
+    suspend fun build(images: List<Uri>, apiKey: String, model: String): GrammarSetContent =
+        fromToolInput(api.callTool(apiKey, model, request(images)))
+
+    fun fromToolInput(input: JSONObject): GrammarSetContent {
+        val set = GrammarSetContent.fromJsonObject(input)
+        if (set.rules.isEmpty()) throw ClaudeException("На фото не нашлось правила с примерами. Сними страницу с правилом целиком.")
+        return set
+    }
+
+    /** Запрос без отправки: для пакетной обработки. */
+    suspend fun request(images: List<Uri>): ToolRequest {
         if (images.isEmpty()) throw ClaudeException("Нет фотографий")
         val content = JSONArray()
         for (uri in images) content.put(ClaudeApi.imageBlock(Images.encodeJpegBase64(context, uri)))
         content.put(ClaudeApi.textBlock("На фото — страница учебника с грамматическим правилом. Разбери его на уровни тренажёра и сохрани инструментом save_grammar_set."))
-        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, content, tool())
-        val set = GrammarSetContent.fromJsonObject(input)
-        if (set.rules.isEmpty()) throw ClaudeException("На фото не нашлось правила с примерами. Сними страницу с правилом целиком.")
-        return set
+        return ToolRequest(SYSTEM_PROMPT, content, tool())
     }
 
     private fun tool(): JSONObject {

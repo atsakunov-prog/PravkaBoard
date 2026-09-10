@@ -35,7 +35,7 @@ import ru.tsakunov.pravka.ui.vm.HomeworkState
 
 /** Вкладка «Домашка»: проверить новую и список проверенных. */
 @Composable
-fun HomeworkListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -> Unit) {
+fun HomeworkListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onIntake: () -> Unit, onTab: (Tab) -> Unit) {
     val homeworks by vm.homeworks.collectAsStateWithLifecycle()
     val checks by vm.homeworkChecks.collectAsStateWithLifecycle()
     val state by vm.homeworkState.collectAsStateWithLifecycle()
@@ -58,6 +58,7 @@ fun HomeworkListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) 
         topBar = {
             TopAppBar(
                 title = { Text("Домашка", fontWeight = FontWeight.Bold) },
+                actions = { IntakeIcon(onIntake) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PravkaColors.Page),
             )
         },

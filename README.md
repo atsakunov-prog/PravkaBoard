@@ -74,6 +74,19 @@ Android-приложение для домашнего английского: �
 - Запасной режим «Секундомер»: СТАРТ, папа жмёт «запинка», СТОП. Чтение короче трёх секунд не записывается.
 - Рассказы Opus из уроков тоже открываются здесь; ненужный можно удалить корзинкой.
 
+### Вся домашка одним пакетом
+- Иконка сканера в шапке любой вкладки. Фотографируешь всю домашку подряд (до 24 фото, любой порядок):
+  словарь, правило, упражнения с ответами, страницы книжки. Opus сначала смотрит, что на каждой странице,
+  потом каждый вид уходит своему разборщику: словарь становится уроком Гармошки и Слов, правило — темой в
+  Грамматике, упражнения — проверкой в Домашке, страницы книжки — текстом. Из карточки разбора всё
+  открывается в один тап.
+- Переключатель «Пакетная обработка» отправляет разбор через Message Batches API: вдвое дешевле, ответ
+  обычно через 5–30 минут (по договору до суток). Сортировка страниц всё равно идёт сразу, чтобы понять,
+  что отправлять. Пакет проверяется при каждом запуске приложения и раз в полминуты, пока открыт экран
+  «Вся домашка»; кнопка обновления в шапке проверяет вручную. Приложение можно закрывать.
+- Разбор, прерванный закрытием приложения в обычном режиме, через десять минут помечается ошибкой,
+  части, которые успели пройти, остаются.
+
 ## Как получить APK
 
 Каждый пуш в `main` или в ветку `claude/**` собирает подписанный APK через GitHub Actions и публикует его
@@ -115,8 +128,8 @@ APK появится в `app/build/outputs/apk/debug/`.
 app/src/main/java/ru/tsakunov/pravka/
   PravkaApp.kt              Application, ручной DI
   MainActivity.kt
-  data/                     Room v4: WordList, WordItem, Attempt, Story, QuizRun, Homework, HomeworkCheck,
-                            GrammarSet, GrammarProgress, ReadingText, ReadingRun; Repository; Settings; посев
+  data/                     Room v6: WordList, WordItem, Attempt, Story, QuizRun, Homework, HomeworkCheck,
+                            GrammarSet, GrammarProgress, ReadingText, ReadingRun, IntakeJob; Repository; Settings; посев
   domain/Stats.kt           подсчёт букв, статистика по языку, вердикт попытки, серии, рубежи
   domain/Repeats.kt         группировка попыток по слову: первый / второй / третий проход
   domain/ByLength.kt        сколько уходит на слово из N букв
@@ -127,12 +140,19 @@ app/src/main/java/ru/tsakunov/pravka/
   api/ClaudeHomework.kt     проверка домашки по фото
   api/ClaudeGrammar.kt      страница правила → уровни тренажёра
   api/ClaudeReading.kt      страницы книжки → текст для чтения
+  api/ClaudeReadingJudge.kt разбор чтения с микрофоном по предложениям
+  api/ClaudeSorter.kt       фото всей домашки → что на какой странице
+  api/ClaudeBatch.kt        Message Batches: создать пакет, опросить, забрать итоги
   api/Updater.kt            GitHub Releases → скачивание APK → системный установщик
   domain/Matching.kt        сопоставление распознанной речи с ожидаемым ответом
   domain/Homework.kt, Grammar.kt  модели результатов проверки и тренажёра (JSON в Room)
+  domain/Reading.kt         разбивка на предложения, локальная оценка чтения, разбор по предложениям
+  domain/Intake.kt          части разбора всей домашки
+  ui/vm/IntakeCoordinator.kt  сортировка страниц, параллельные или пакетные запросы, раскладка по вкладкам
   ui/PravkaRoot.kt          навигация
   ui/screens/               Home (Гармошка), List, Practice, Progress, Words, Learn, Teach, Test, Story,
-                            HomeworkScreens, GrammarScreens, ReadingScreens, Settings
+                            HomeworkScreens, GrammarScreens, ReadingScreens (список), ReadingScreen (чтение
+                            с микрофоном и секундомером), IntakeScreen (вся домашка), Settings
   ui/components/            SpeedChart (Canvas), RepeatTable, ConfettiOverlay, Speech (TTS и распознавание),
                             PhotoPicker, диалоги
 ```

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -158,5 +159,13 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
 fun EmptyHint(text: String, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
         Text(text, color = PravkaColors.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    }
+}
+
+/** Кнопка «вся домашка» в шапке вкладок: разбор пакета фото по разделам. */
+@Composable
+fun IntakeIcon(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(androidx.compose.material.icons.Icons.Filled.DocumentScanner, contentDescription = "Вся домашка", tint = PravkaColors.Ink)
     }
 }

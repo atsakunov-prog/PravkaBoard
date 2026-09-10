@@ -9,7 +9,17 @@ import ru.tsakunov.pravka.domain.HomeworkResult
 /** Проверка домашки по фото: что верно, что нет, а после второй попытки — почему. */
 class ClaudeHomework(private val context: Context, private val api: ClaudeApi) {
 
-    suspend fun check(images: List<Uri>, previous: HomeworkResult?, apiKey: String, model: String): HomeworkResult {
+    suspend fun check(images: List<Uri>, previous: HomeworkResult?, apiKey: String, model: String): HomeworkResult =
+        fromToolInput(api.callTool(apiKey, model, request(images, previous)))
+
+    fun fromToolInput(input: JSONObject): HomeworkResult {
+        val result = HomeworkResult.fromJsonObject(input)
+        if (result.total == 0) throw ClaudeException("На фото не нашлось выполненных заданий. Сними страницу целиком, чтобы были видны и задание, и ответы.")
+        return result
+    }
+
+    /** Запрос без отправки: для пакетной обработки. */
+    suspend fun request(images: List<Uri>, previous: HomeworkResult?): ToolRequest {
         if (images.isEmpty()) throw ClaudeException("Нет фотографий")
         val content = JSONArray()
         for (uri in images) content.put(ClaudeApi.imageBlock(Images.encodeJpegBase64(context, uri)))
@@ -25,10 +35,7 @@ class ClaudeHomework(private val context: Context, private val api: ClaudeApi) {
             }
         }
         content.put(ClaudeApi.textBlock(ask))
-        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, content, tool())
-        val result = HomeworkResult.fromJsonObject(input)
-        if (result.total == 0) throw ClaudeException("На фото не нашлось выполненных заданий. Сними страницу целиком, чтобы были видны и задание, и ответы.")
-        return result
+        return ToolRequest(SYSTEM_PROMPT, content, tool())
     }
 
     private fun tool(): JSONObject {

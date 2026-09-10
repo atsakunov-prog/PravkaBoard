@@ -36,7 +36,7 @@ import ru.tsakunov.pravka.ui.vm.GrammarState
 
 /** Вкладка «Грамматика»: сфотографировать правило, список тем с прогрессом. */
 @Composable
-fun GrammarListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -> Unit) {
+fun GrammarListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onIntake: () -> Unit, onTab: (Tab) -> Unit) {
     val sets by vm.grammarSets.collectAsStateWithLifecycle()
     val progress by vm.grammarProgress.collectAsStateWithLifecycle()
     val state by vm.grammarState.collectAsStateWithLifecycle()
@@ -53,6 +53,7 @@ fun GrammarListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -
         topBar = {
             TopAppBar(
                 title = { Text("Грамматика", fontWeight = FontWeight.Bold) },
+                actions = { IntakeIcon(onIntake) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PravkaColors.Page),
             )
         },

@@ -211,3 +211,24 @@ interface StoryListDao {
     @Query("SELECT * FROM stories WHERE id = :id")
     fun observeStoryById(id: String): Flow<Story?>
 }
+
+@Dao
+interface IntakeDao {
+    @Query("SELECT * FROM intake_jobs ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<IntakeJob>>
+
+    @Query("SELECT * FROM intake_jobs WHERE id = :id")
+    suspend fun get(id: String): IntakeJob?
+
+    @Query("SELECT * FROM intake_jobs WHERE status = 'queued'")
+    suspend fun queued(): List<IntakeJob>
+
+    @Query("SELECT * FROM intake_jobs WHERE status = 'running'")
+    suspend fun running(): List<IntakeJob>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(job: IntakeJob)
+
+    @Query("DELETE FROM intake_jobs WHERE id = :id")
+    suspend fun delete(id: String)
+}

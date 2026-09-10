@@ -213,3 +213,34 @@ data class ReadingRun(
         const val MODE_MIC = "mic"
     }
 }
+
+/**
+ * Разбор всей домашки одним пакетом фото. mode: sync (сразу) или batch (Message Batches, вдвое дешевле).
+ * status: running (идёт сейчас), queued (пакет отправлен, ждём), done, error. partsJson — список IntakePart.
+ */
+@Entity(tableName = "intake_jobs", indices = [Index("createdAt")])
+data class IntakeJob(
+    @PrimaryKey val id: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val title: String,
+    val mode: String,
+    val status: String,
+    val photos: Int,
+    val batchId: String?,
+    val partsJson: String,
+    val error: String?,
+    /** Служебная строка о ходе дела: «2 из 4 готово», «не удалось проверить: нет сети». */
+    val progress: String? = null,
+) {
+    val isBatch: Boolean get() = mode == MODE_BATCH
+
+    companion object {
+        const val MODE_SYNC = "sync"
+        const val MODE_BATCH = "batch"
+        const val RUNNING = "running"
+        const val QUEUED = "queued"
+        const val DONE = "done"
+        const val ERROR = "error"
+    }
+}

@@ -33,7 +33,7 @@ import ru.tsakunov.pravka.ui.wordsWord
 
 /** Вкладка «Слова»: выбор урока, затем режимы. */
 @Composable
-fun WordsScreen(vm: AppViewModel, onOpenHub: (String) -> Unit, onTab: (Tab) -> Unit) {
+fun WordsScreen(vm: AppViewModel, onOpenHub: (String) -> Unit, onIntake: () -> Unit, onTab: (Tab) -> Unit) {
     val lists by vm.lists.collectAsStateWithLifecycle()
     val runs by vm.quizRuns.collectAsStateWithLifecycle()
 
@@ -42,6 +42,7 @@ fun WordsScreen(vm: AppViewModel, onOpenHub: (String) -> Unit, onTab: (Tab) -> U
         topBar = {
             TopAppBar(
                 title = { Text("Слова", fontWeight = FontWeight.Bold) },
+                actions = { IntakeIcon(onIntake) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PravkaColors.Page),
             )
         },
