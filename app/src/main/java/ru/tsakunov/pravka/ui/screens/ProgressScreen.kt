@@ -36,7 +36,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
-fun ProgressScreen(vm: AppViewModel, onTab: (Tab) -> Unit) {
+fun ProgressScreen(vm: AppViewModel, onBack: () -> Unit) {
     val attempts by vm.attempts.collectAsStateWithLifecycle()
     val settings by vm.settingsState.collectAsStateWithLifecycle()
     val metric = Metric.SEC_PER_LETTER
@@ -54,11 +54,11 @@ fun ProgressScreen(vm: AppViewModel, onTab: (Tab) -> Unit) {
         containerColor = PravkaColors.Page,
         topBar = {
             TopAppBar(
+                navigationIcon = { BackIcon(onBack) },
                 title = { Text("Прогресс", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PravkaColors.Page),
             )
         },
-        bottomBar = { PravkaBottomBar(Tab.PROGRESS, onTab) },
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),

@@ -26,7 +26,14 @@ import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.ui.components.Tab
 import ru.tsakunov.pravka.ui.screens.HomeScreen
+import ru.tsakunov.pravka.ui.screens.LearnScreen
 import ru.tsakunov.pravka.ui.screens.ListScreen
+import ru.tsakunov.pravka.ui.screens.PlaceholderScreen
+import ru.tsakunov.pravka.ui.screens.StoryScreen
+import ru.tsakunov.pravka.ui.screens.TeachScreen
+import ru.tsakunov.pravka.ui.screens.TestScreen
+import ru.tsakunov.pravka.ui.screens.WordsHubScreen
+import ru.tsakunov.pravka.ui.screens.WordsScreen
 import ru.tsakunov.pravka.ui.screens.PracticeScreen
 import ru.tsakunov.pravka.ui.screens.ProgressScreen
 import ru.tsakunov.pravka.ui.screens.SettingsScreen
@@ -35,13 +42,31 @@ import ru.tsakunov.pravka.ui.vm.AppViewModel
 
 object Routes {
     const val HOME = "home"
+    const val WORDS = "words"
+    const val GRAMMAR = "grammar"
+    const val HOMEWORK = "homework"
+    const val TEXTS = "texts"
     const val PROGRESS = "progress"
     const val SETTINGS = "settings"
     const val LIST = "list/{listId}"
     const val PRACTICE = "practice/{listId}/{itemId}/{lang}"
+    const val WORDS_HUB = "words/{listId}"
+    const val LEARN = "learn/{listId}"
+    const val TEACH = "teach/{listId}"
+    const val TEST = "test/{listId}"
+    const val STORY = "story/{listId}"
 
     fun list(id: String) = "list/$id"
     fun practice(listId: String, itemId: String, lang: Lang) = "practice/$listId/$itemId/${lang.code}"
+    fun wordsHub(id: String) = "words/$id"
+    fun learn(id: String) = "learn/$id"
+    fun teach(id: String) = "teach/$id"
+    fun test(id: String) = "test/$id"
+    fun story(id: String) = "story/$id"
+
+    fun tabRoute(tab: Tab) = when (tab) {
+        Tab.PROPISI -> HOME; Tab.WORDS -> WORDS; Tab.GRAMMAR -> GRAMMAR; Tab.HOMEWORK -> HOMEWORK; Tab.TEXT -> TEXTS
+    }
 }
 
 @Composable
@@ -75,11 +100,55 @@ fun PravkaRoot(app: PravkaApp) {
                         vm = vm,
                         onOpenList = { nav.navigate(Routes.list(it)) },
                         onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                        onOpenProgress = { nav.navigate(Routes.PROGRESS) },
                         onTab = { nav.switchTab(it) },
                     )
                 }
                 composable(Routes.PROGRESS) {
-                    ProgressScreen(vm = vm, onTab = { nav.switchTab(it) })
+                    ProgressScreen(vm = vm, onBack = { nav.popBackStack() })
+                }
+                composable(Routes.WORDS) {
+                    WordsScreen(vm = vm, onOpenHub = { nav.navigate(Routes.wordsHub(it)) }, onTab = { nav.switchTab(it) })
+                }
+                composable(Routes.WORDS_HUB) { entry ->
+                    val listId = entry.arguments?.getString("listId") ?: return@composable
+                    WordsHubScreen(
+                        vm = vm, listId = listId,
+                        onBack = { nav.popBackStack() },
+                        onLearn = { nav.navigate(Routes.learn(listId)) },
+                        onTeach = { nav.navigate(Routes.teach(listId)) },
+                        onTest = { nav.navigate(Routes.test(listId)) },
+                        onStory = { nav.navigate(Routes.story(listId)) },
+                    )
+                }
+                composable(Routes.LEARN) { entry ->
+                    val listId = entry.arguments?.getString("listId") ?: return@composable
+                    LearnScreen(vm = vm, listId = listId, onBack = { nav.popBackStack() }, onTeach = {
+                        nav.navigate(Routes.teach(listId)) { popUpTo(Routes.WORDS_HUB) { inclusive = false } }
+                    })
+                }
+                composable(Routes.TEACH) { entry ->
+                    val listId = entry.arguments?.getString("listId") ?: return@composable
+                    TeachScreen(vm = vm, listId = listId, onBack = { nav.popBackStack() }, onTest = {
+                        nav.navigate(Routes.test(listId)) { popUpTo(Routes.WORDS_HUB) { inclusive = false } }
+                    })
+                }
+                composable(Routes.TEST) { entry ->
+                    val listId = entry.arguments?.getString("listId") ?: return@composable
+                    TestScreen(vm = vm, listId = listId, onBack = { nav.popBackStack() })
+                }
+                composable(Routes.STORY) { entry ->
+                    val listId = entry.arguments?.getString("listId") ?: return@composable
+                    StoryScreen(vm = vm, listId = listId, onBack = { nav.popBackStack() })
+                }
+                composable(Routes.GRAMMAR) {
+                    PlaceholderScreen(Tab.GRAMMAR, "Фото страницы с правилом превратится в тренажёр: слово на экране, Боря говорит форму, папа отмечает верно или нет. Уровни по правилам, пять верных подряд открывают следующий.", onTab = { nav.switchTab(it) })
+                }
+                composable(Routes.HOMEWORK) {
+                    PlaceholderScreen(Tab.HOMEWORK, "Фото сделанной домашки: Opus проверит и подсветит красным, что не так. После исправления второе фото, а если ошибка осталась, появится подсказка с объяснением.", onTab = { nav.switchTab(it) })
+                }
+                composable(Routes.TEXTS) {
+                    PlaceholderScreen(Tab.TEXT, "Фото страниц книжки: чтение на время, слова в минуту, кнопка запинки, прогресс по книге. Сюда же попадут рассказы Opus на словах урока.", onTab = { nav.switchTab(it) })
                 }
                 composable(Routes.SETTINGS) {
                     SettingsScreen(vm = vm, onBack = { nav.popBackStack() })
@@ -125,7 +194,7 @@ fun PravkaRoot(app: PravkaApp) {
 }
 
 private fun NavHostController.switchTab(tab: Tab) {
-    val route = if (tab == Tab.WORDS) Routes.HOME else Routes.PROGRESS
+    val route = Routes.tabRoute(tab)
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

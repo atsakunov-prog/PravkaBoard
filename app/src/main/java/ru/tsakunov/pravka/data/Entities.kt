@@ -82,3 +82,32 @@ data class WordListWithCount(
     /** Сколько слов реально можно писать: непустые английские плюс непустые русские. */
     val taskCount: Int,
 )
+
+/** Рассказ, сочинённый моделью на словах урока. */
+@Entity(
+    tableName = "stories",
+    foreignKeys = [
+        ForeignKey(entity = WordList::class, parentColumns = ["id"], childColumns = ["listId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("listId")],
+)
+data class Story(
+    @PrimaryKey val id: String,
+    val listId: String,
+    val title: String,
+    val textEn: String,
+    val textRu: String,
+    val createdAt: Long,
+)
+
+/** Прохождение контрольной по уроку: с какой попытки и за сколько. */
+@Entity(tableName = "quiz_runs", indices = [Index("listId"), Index("ts")])
+data class QuizRun(
+    @PrimaryKey val id: String,
+    val listId: String,
+    val ts: Long,
+    /** Номер попытки, на которой урок пройден без ошибок (1 = с первого раза). */
+    val attempts: Int,
+    val durationMs: Long,
+    val words: Int,
+)

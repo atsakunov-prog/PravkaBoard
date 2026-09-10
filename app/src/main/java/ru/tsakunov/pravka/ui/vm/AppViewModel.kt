@@ -10,7 +10,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.PravkaApp
+import ru.tsakunov.pravka.api.ClaudeApi
 import ru.tsakunov.pravka.api.ClaudeException
+import ru.tsakunov.pravka.api.ClaudeJudge
+import ru.tsakunov.pravka.api.ClaudeStory
 import ru.tsakunov.pravka.api.ClaudeVocabParser
 import ru.tsakunov.pravka.api.UpdateException
 import ru.tsakunov.pravka.api.UpdateInfo
@@ -35,6 +38,12 @@ sealed interface UpdateState {
     data class Error(val message: String) : UpdateState
 }
 
+sealed interface StoryState {
+    data object Idle : StoryState
+    data object Generating : StoryState
+    data class Error(val message: String) : StoryState
+}
+
 sealed interface ParseState {
     data object Idle : ParseState
     data class Running(val photos: Int) : ParseState
@@ -47,7 +56,45 @@ class AppViewModel(
     private val settings: Settings,
     private val parser: ClaudeVocabParser,
     private val updater: Updater,
+    private val storyGen: ClaudeStory,
+    private val judge: ClaudeJudge,
 ) : ViewModel() {
+
+    // ---- Слова: рассказ, контроша, судья ----
+    val quizRuns = repo.observeAllQuizRuns().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun observeQuizRuns(listId: String) = repo.observeQuizRuns(listId)
+    fun observeStory(listId: String) = repo.observeStory(listId)
+
+    private val _story = MutableStateFlow<StoryState>(StoryState.Idle)
+    val storyState: StateFlow<StoryState> = _story
+
+    fun generateStory(listId: String, items: List<WordItem>, previousTitle: String?) {
+        if (_story.value is StoryState.Generating) return
+        val s = settings.state.value
+        _story.value = StoryState.Generating
+        viewModelScope.launch {
+            try {
+                val g = storyGen.generate(items, s.apiKey, s.model, previousTitle)
+                repo.saveStory(listId, g.title, g.textEn, g.textRu)
+                _story.value = StoryState.Idle
+            } catch (e: ClaudeException) {
+                _story.value = StoryState.Error(e.message ?: "Ошибка")
+            } catch (e: Exception) {
+                _story.value = StoryState.Error("Не получилось: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    /** Запасной судья для фраз: спрашивает модель, засчитать ли ответ. При ошибке сети не засчитывает. */
+    suspend fun judgeAnswer(ru: String, expectedEn: String, heard: List<String>): Boolean {
+        val s = settings.state.value
+        if (s.apiKey.isBlank()) return false
+        return try { judge.accept(ru, expectedEn, heard, s.apiKey, s.model) } catch (e: Exception) { false }
+    }
+
+    fun saveQuizRun(listId: String, attempts: Int, durationMs: Long, words: Int) = viewModelScope.launch {
+        repo.addQuizRun(listId, attempts, durationMs, words)
+    }
 
     // ---- Обновления из GitHub ----
     private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -185,6 +232,8 @@ class AppViewModel(
     class Factory(private val app: PravkaApp) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            AppViewModel(app.repository, app.settings, ClaudeVocabParser(app), Updater(app)) as T
+            ClaudeApi().let { api ->
+                AppViewModel(app.repository, app.settings, ClaudeVocabParser(app, api), Updater(app), ClaudeStory(api), ClaudeJudge(api)) as T
+            }
     }
 }

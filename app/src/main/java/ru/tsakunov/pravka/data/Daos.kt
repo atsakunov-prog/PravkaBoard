@@ -91,3 +91,27 @@ interface AttemptDao {
     @Query("DELETE FROM attempts")
     suspend fun clear()
 }
+
+@Dao
+interface StoryDao {
+    @Query("SELECT * FROM stories WHERE listId = :listId ORDER BY createdAt DESC LIMIT 1")
+    fun observeLatest(listId: String): Flow<Story?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(story: Story)
+
+    @Query("DELETE FROM stories WHERE listId = :listId")
+    suspend fun deleteForList(listId: String)
+}
+
+@Dao
+interface QuizRunDao {
+    @Query("SELECT * FROM quiz_runs WHERE listId = :listId ORDER BY ts DESC")
+    fun observeForList(listId: String): Flow<List<QuizRun>>
+
+    @Query("SELECT * FROM quiz_runs ORDER BY ts DESC")
+    fun observeAll(): Flow<List<QuizRun>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(run: QuizRun)
+}

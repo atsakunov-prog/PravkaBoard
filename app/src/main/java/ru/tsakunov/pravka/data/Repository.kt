@@ -12,6 +12,8 @@ class Repository(
 ) {
     private val lists get() = db.wordListDao()
     private val attempts get() = db.attemptDao()
+    private val stories get() = db.storyDao()
+    private val quizRuns get() = db.quizRunDao()
 
     // ---- Наблюдение ----
     fun observeLists(): Flow<List<WordListWithCount>> = lists.observeLists()
@@ -87,6 +89,24 @@ class Repository(
     }
 
     suspend fun deleteAttempt(id: String) = attempts.delete(id)
+
+    // ---- Рассказы и контрольные ----
+    fun observeStory(listId: String): Flow<Story?> = stories.observeLatest(listId)
+
+    suspend fun saveStory(listId: String, title: String, textEn: String, textRu: String): Story {
+        val story = Story(id = newId(), listId = listId, title = title, textEn = textEn, textRu = textRu, createdAt = System.currentTimeMillis())
+        stories.insert(story)
+        return story
+    }
+
+    fun observeQuizRuns(listId: String): Flow<List<QuizRun>> = quizRuns.observeForList(listId)
+    fun observeAllQuizRuns(): Flow<List<QuizRun>> = quizRuns.observeAll()
+
+    suspend fun addQuizRun(listId: String, attempts: Int, durationMs: Long, words: Int): QuizRun {
+        val run = QuizRun(id = newId(), listId = listId, ts = System.currentTimeMillis(), attempts = attempts, durationMs = durationMs, words = words)
+        quizRuns.insert(run)
+        return run
+    }
 
     // ---- Резервная копия ----
     suspend fun exportJson(): String {

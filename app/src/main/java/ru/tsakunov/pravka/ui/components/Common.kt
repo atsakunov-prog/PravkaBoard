@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -73,25 +76,33 @@ fun BackIcon(onBack: () -> Unit) {
     }
 }
 
-enum class Tab { WORDS, PROGRESS }
+enum class Tab(val label: String) {
+    PROPISI("Гармошка"), WORDS("Слова"), GRAMMAR("Грамматика"), HOMEWORK("Домашка"), TEXT("Текст")
+}
 
 @Composable
 fun PravkaBottomBar(current: Tab, onSelect: (Tab) -> Unit) {
     NavigationBar(containerColor = PravkaColors.Surface, tonalElevation = 0.dp) {
-        NavigationBarItem(
-            selected = current == Tab.WORDS,
-            onClick = { onSelect(Tab.WORDS) },
-            icon = { Icon(Icons.Filled.List, contentDescription = null) },
-            label = { Text("Слова") },
-            colors = navColors(),
-        )
-        NavigationBarItem(
-            selected = current == Tab.PROGRESS,
-            onClick = { onSelect(Tab.PROGRESS) },
-            icon = { Icon(Icons.Filled.ShowChart, contentDescription = null) },
-            label = { Text("Прогресс") },
-            colors = navColors(),
-        )
+        Tab.entries.forEach { tab ->
+            NavigationBarItem(
+                selected = current == tab,
+                onClick = { onSelect(tab) },
+                icon = {
+                    Icon(
+                        when (tab) {
+                            Tab.PROPISI -> Icons.Filled.Edit
+                            Tab.WORDS -> Icons.Filled.Style
+                            Tab.GRAMMAR -> Icons.Filled.School
+                            Tab.HOMEWORK -> Icons.Filled.AssignmentTurnedIn
+                            Tab.TEXT -> Icons.Filled.MenuBook
+                        },
+                        contentDescription = null,
+                    )
+                },
+                label = { Text(tab.label, maxLines = 1) },
+                colors = navColors(),
+            )
+        }
     }
 }
 
