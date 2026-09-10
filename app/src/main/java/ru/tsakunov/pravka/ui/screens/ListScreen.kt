@@ -25,13 +25,15 @@ import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.isToday
-import ru.tsakunov.pravka.domain.repeatRows
+import ru.tsakunov.pravka.domain.attemptsForWord
+import ru.tsakunov.pravka.domain.repeatRowsForList
 import ru.tsakunov.pravka.domain.repeatSummary
 import ru.tsakunov.pravka.domain.statsFor
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.fmtNum
 import ru.tsakunov.pravka.ui.fmtTime
 import ru.tsakunov.pravka.ui.lettersWord
+import ru.tsakunov.pravka.ui.plural
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import ru.tsakunov.pravka.ui.wordsWord
@@ -70,7 +72,7 @@ fun ListScreen(
     val tasks = remember(items) { tasksOf(items) }
     val todayHere = remember(attempts, listId) { attempts.filter { it.listId == listId && isToday(it.ts) } }
     val firstUndone = tasks.firstOrNull { doneToday(attempts, it) == null }
-    val repeats = remember(attempts, listId) { repeatRows(attempts, listId) }
+    val repeats = remember(attempts, items) { repeatRowsForList(attempts, listId, items) }
 
     Scaffold(
         containerColor = PravkaColors.Page,
@@ -131,9 +133,13 @@ fun ListScreen(
             if (repeats.isNotEmpty()) {
                 item {
                     PravkaCard {
-                        Text("Повторы", style = MaterialTheme.typography.titleMedium)
+                        Text("Повторы: то же слово во второй раз", style = MaterialTheme.typography.titleMedium)
                         repeatSummary(repeats)?.let { RepeatSummaryText(it, Modifier.padding(top = 4.dp, bottom = 8.dp)) }
                         RepeatTable(repeats)
+                        Text(
+                            "Сюда попадают и результаты с бумаги по тем же словам.",
+                            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 6.dp),
+                        )
                     }
                 }
             }
@@ -192,11 +198,13 @@ private fun WordRow(
         WordChip(
             text = item.en, lang = Lang.EN,
             done = if (item.en.isNotBlank()) doneToday(attempts, Task(item, Lang.EN)) else null,
+            history = if (item.en.isNotBlank()) attemptsForWord(attempts, Lang.EN, item.en) else emptyList(),
             modifier = Modifier.weight(1f), onClick = { onPractice(Lang.EN) },
         )
         WordChip(
             text = item.ru, lang = Lang.RU,
             done = if (item.ru.isNotBlank()) doneToday(attempts, Task(item, Lang.RU)) else null,
+            history = if (item.ru.isNotBlank()) attemptsForWord(attempts, Lang.RU, item.ru) else emptyList(),
             modifier = Modifier.weight(1f), onClick = { onPractice(Lang.RU) },
         )
         Box {
@@ -212,7 +220,7 @@ private fun WordRow(
 }
 
 @Composable
-private fun WordChip(text: String, lang: Lang, done: Attempt?, modifier: Modifier, onClick: () -> Unit) {
+private fun WordChip(text: String, lang: Lang, done: Attempt?, history: List<Attempt>, modifier: Modifier, onClick: () -> Unit) {
     val enabled = text.isNotBlank()
     Surface(
         modifier = modifier.heightIn(min = 60.dp).clickable(enabled = enabled, onClick = onClick),
@@ -229,10 +237,16 @@ private fun WordChip(text: String, lang: Lang, done: Attempt?, modifier: Modifie
                 Text("—", color = PravkaColors.Muted)
             } else {
                 Text(text, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val best = history.minByOrNull { it.ms }
                 Text(
-                    if (done != null) "✓ ${fmtTime(done.ms)} · ${fmtNum(done.secPerLetter)} с/б" else lettersWord(countLetters(text)),
+                    when {
+                        done != null -> "✓ ${fmtTime(done.ms)} · ${fmtNum(done.secPerLetter)} с/б"
+                        best != null -> "${lettersWord(countLetters(text))} · лучшее ${fmtTime(best.ms)} · ${plural(history.size, "раз", "раза", "раз")}"
+                        else -> lettersWord(countLetters(text))
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = if (done != null) PravkaColors.GoodText else PravkaColors.Muted,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
         }

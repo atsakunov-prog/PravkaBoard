@@ -7,33 +7,81 @@ import org.junit.Test
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.Seed
+import ru.tsakunov.pravka.data.WordItem
+import ru.tsakunov.pravka.domain.normalizeWord
 import ru.tsakunov.pravka.domain.repeatRows
+import ru.tsakunov.pravka.domain.repeatRowsForList
+import ru.tsakunov.pravka.domain.statsByLength
 import ru.tsakunov.pravka.domain.repeatSummary
 import ru.tsakunov.pravka.domain.statsFor
 
 class RepeatsTest {
 
     @Test
-    fun seed_v2_countsAndPairs() {
+    fun seed_v4_countsAndPairs() {
         val seed = Seed.attempts()
         assertEquals(11, statsFor(Lang.RU, seed).n)
-        assertEquals(14, statsFor(Lang.EN, seed).n) // 11 первых проходов + 3 вторых
+        assertEquals(22, statsFor(Lang.EN, seed).n)
         assertEquals(seed.size, seed.map { it.id }.toSet().size) // идентификаторы уникальны
 
         val rows = repeatRows(seed)
-        assertEquals(3, rows.size)
+        assertEquals(11, rows.size)
         assertTrue(rows.all { it.lang == Lang.EN && it.passes.size == 2 })
-        // 4 буквы: 0:36 -> 0:27 (−25%), 6 букв: 1:01 -> 0:31 (−49%), 5 букв: 0:34 -> 0:28 (−18%)
-        val byLetters = rows.associateBy { it.letters }
-        assertEquals(-25, byLetters[4]!!.deltaPct)
-        assertEquals(-49, byLetters[6]!!.deltaPct)
-        assertEquals(-18, byLetters[5]!!.deltaPct)
+        val byWord = rows.associateBy { it.word }
+        assertEquals(-25, byWord["a hen"]!!.deltaPct)     // 0:36 -> 0:27
+        assertEquals(-49, byWord["a goose"]!!.deltaPct)   // 1:01 -> 0:31
+        assertEquals(68, byWord["work"]!!.deltaPct)       // 0:22 -> 0:37, медленнее
+        assertEquals(-50, byWord["to do"]!!.deltaPct)     // 0:24 -> 0:12
+        assertEquals(7, byWord["to plant"]!!.letters)
 
         val s = repeatSummary(rows)
         assertNotNull(s)
-        assertEquals(3, s!!.words)
-        assertEquals(3, s.fasterCount)
-        assertEquals(-31, s.avgSecondPassPct)
+        assertEquals(11, s!!.words)
+        assertEquals(9, s.fasterCount)
+        assertEquals(-19, s.medianSecondPassPct) // медиана по 11 словам
+    }
+
+    @Test
+    fun normalizeWord_stripsArticlesAndTo() {
+        assertEquals("hen", normalizeWord("A hen"))
+        assertEquals("plant", normalizeWord("to plant"))
+        assertEquals("little red hen.", normalizeWord("  The  little red hen. "))
+        assertEquals(null, normalizeWord("   "))
+        assertEquals("курица", normalizeWord("Курица"))
+        assertEquals("теплый", normalizeWord("Тёплый"))
+    }
+
+    @Test
+    fun listRows_includePaperAttemptsForSameWords() {
+        val seed = Seed.attempts()
+        val list = "L3"
+        val items = listOf(
+            WordItem(id = "i1", listId = list, en = "hen", ru = "курица", kind = "word", position = 0),
+            WordItem(id = "i2", listId = list, en = "to plant", ru = "сажать", kind = "word", position = 1),
+        )
+        // Сегодняшняя попытка в приложении по слову без артикля объединяется с бумажным «a hen».
+        val today = Attempt(
+            id = "app-1", ts = System.currentTimeMillis(), lang = Lang.EN.code, word = "hen", letters = 3, ms = 20_000,
+            source = "app", listId = list, itemId = "i1",
+        )
+        val rows = repeatRowsForList(seed + today, list, items)
+        assertEquals(2, rows.size)
+        val hen = rows.first { normalizeWord(it.word) == "hen" }
+        assertEquals(3, hen.passes.size)
+        assertEquals("hen", hen.word) // подпись берётся из последней попытки
+        assertEquals(2, rows.first { normalizeWord(it.word) == "plant" }.passes.size)
+        // Русские бумажные слова написаны по одному разу, повторов у них ещё нет
+        assertTrue(rows.all { it.lang == Lang.EN })
+    }
+
+    @Test
+    fun statsByLength_groupsWords() {
+        val seed = Seed.attempts()
+        val en = statsByLength(Lang.EN, seed)
+        assertEquals(listOf(4, 5, 6, 7), en.map { it.letters })
+        val four = en.first { it.letters == 4 }
+        assertEquals(8, four.n) // a hen, work, to do, warm — по два прохода
+        assertEquals(12_000L, four.bestMs)
     }
 
     @Test
@@ -54,10 +102,11 @@ class RepeatsTest {
         assertEquals(3, cut.passes.size)
         assertEquals(-28, cut.deltaPct)
         assertEquals(-4, cut.secondPassPct)
-        val hen = rows.first { it.word == "hen" }
+        val hen = rows.first { normalizeWord(it.word) == "hen" }
         assertEquals(2, hen.passes.size)
+        assertEquals("Hen", hen.word) // подпись из последней попытки
 
-        val onlyL1 = repeatRows(all, listId = "L1")
+        val onlyL1 = repeatRowsForList(all, "L1", listOf(WordItem("i3", "L1", "cut", "резать", "word", 0)))
         assertEquals(1, onlyL1.size)
         assertEquals("cut", onlyL1.single().word)
     }

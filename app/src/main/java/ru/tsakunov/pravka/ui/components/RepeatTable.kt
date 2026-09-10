@@ -43,7 +43,7 @@ fun RepeatTable(rows: List<RepeatRow>, modifier: Modifier = Modifier) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     LangTag(r.lang)
                     Text(
-                        r.word ?: "${lettersWord(r.letters)} · бумага",
+                        r.word ?: "${lettersWord(r.letters)} · с бумаги",
                         style = if (r.word != null) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodySmall,
                         color = if (r.word != null) PravkaColors.Ink else PravkaColors.Ink2,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -95,21 +95,19 @@ private fun DeltaCell(pct: Int) {
     )
 }
 
-/** Фраза-итог для Бори: «Второй раз то же слово ты пишешь в среднем на 30% быстрее». */
+/** Фраза-итог для Бори: «Второй раз то же слово ты обычно пишешь на 19% быстрее (9 из 11 слов)». */
 @Composable
 fun RepeatSummaryText(s: RepeatSummary, modifier: Modifier = Modifier) {
+    val pct = s.medianSecondPassPct
     val text = when {
-        s.avgSecondPassPct <= -3 ->
-            "Второй раз то же слово Боря пишет в среднем на ${abs(s.avgSecondPassPct)}% быстрее " +
-                "(${s.fasterCount} из ${wordsWord(s.words)})."
-        s.avgSecondPassPct >= 3 ->
-            "Второй раз пока выходит медленнее на ${s.avgSecondPassPct}%: ${s.fasterCount} из ${wordsWord(s.words)} стали быстрее."
+        pct <= -3 -> "Второй раз то же слово Боря обычно пишет на ${abs(pct)}% быстрее: ${s.fasterCount} из ${wordsWord(s.words)} стали быстрее."
+        pct >= 3 -> "Второй раз пока обычно выходит медленнее на $pct%: быстрее стали ${s.fasterCount} из ${wordsWord(s.words)}."
         else -> "Второй проход идёт примерно с той же скоростью, что и первый (${wordsWord(s.words)})."
     }
     Text(
         text,
         style = MaterialTheme.typography.bodyMedium,
-        color = if (s.avgSecondPassPct <= -3) PravkaColors.GoodText else PravkaColors.Ink2,
+        color = if (pct <= -3) PravkaColors.GoodText else PravkaColors.Ink2,
         modifier = modifier,
     )
 }

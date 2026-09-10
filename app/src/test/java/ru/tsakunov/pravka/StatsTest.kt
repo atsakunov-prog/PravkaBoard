@@ -29,6 +29,8 @@ class StatsTest {
         assertEquals(5, countLetters("geese"))
         assertEquals(6, countLetters("курица"))
         assertEquals(21, countLetters("Here is the little red hen."))
+        assertEquals(4, countLetters("a hen"))
+        assertEquals(7, countLetters("to plant"))
         assertEquals(6, countLetters("Пойдём!"))
         assertEquals(0, countLetters("123 - !"))
     }
@@ -38,16 +40,18 @@ class StatsTest {
         val seed = Seed.attempts()
         val en = statsFor(Lang.EN, seed)
         val ru = statsFor(Lang.RU, seed)
-        assertEquals(14, en.n) // 11 первых проходов + 3 вторых
+        assertEquals(22, en.n) // 11 слов по два прохода
         assertEquals(11, ru.n)
-        // EN: 52 + 15 букв за 405 + 86 секунд; RU: 12 + 56 букв за 101 + 414 секунд
-        assertEquals(67, en.totalLetters)
-        assertEquals(491_000L, en.totalMs)
-        assertEquals(491.0 / 67, en.avg!!, 1e-9)
-        assertEquals(68, ru.totalLetters)
-        assertEquals(515.0 / 68, ru.avg!!, 1e-9)
-        // Лучший EN на бумаге: второй проход 6-буквенного слова за 31 секунду
-        assertEquals(31.0 / 6, en.best!!.secPerLetter, 1e-9)
+        // EN: 55 букв (с артиклями и «to») дважды, 405 + 340 секунд; RU: 66 букв за 515 секунд
+        assertEquals(110, en.totalLetters)
+        assertEquals(745_000L, en.totalMs)
+        assertEquals(745.0 / 110, en.avg!!, 1e-9)
+        assertEquals(66, ru.totalLetters)
+        assertEquals(515.0 / 66, ru.avg!!, 1e-9)
+        assertEquals("курица", seed.first { it.lang == "ru" }.word)
+        // Лучший EN на бумаге: «to do» (4 буквы) за 12 секунд во второй проход
+        assertEquals("to do", en.best!!.word)
+        assertEquals(3.0, en.best!!.secPerLetter, 1e-9)
     }
 
     @Test
@@ -55,12 +59,12 @@ class StatsTest {
         val base = Seed.attempts()
         val now = System.currentTimeMillis()
 
-        val record = attempt("r", Lang.EN, "hen", 3, 12.0, now) // 4,0 с/б < 5,17
+        val record = attempt("r", Lang.EN, "hen", 3, 8.0, now) // 2,67 с/б < 3,0
         val v1 = evaluate(record, base + record)
         assertEquals(VerdictKind.RECORD, v1.kind)
-        assertEquals(31.0 / 6, v1.prevBest!!, 1e-9)
+        assertEquals(3.0, v1.prevBest!!, 1e-9)
 
-        val faster = attempt("f", Lang.EN, "goose", 5, 35.0, now + 1) // 7,0 < средняя 7,33, но > рекорда
+        val faster = attempt("f", Lang.EN, "goose", 5, 30.0, now + 1) // 6,0 < средняя 6,77, но > рекорда
         val v2 = evaluate(faster, base + faster)
         assertEquals(VerdictKind.FASTER, v2.kind)
 
@@ -86,12 +90,12 @@ class StatsTest {
 
     @Test
     fun evaluate_milestoneCrossing() {
-        val base = Seed.attempts() // 135 букв
-        assertEquals(135, base.sumOf { it.letters })
+        val base = Seed.attempts() // 176 букв
+        assertEquals(176, base.sumOf { it.letters })
         val small = attempt("m1", Lang.EN, "Here is the little red hen. Who can help me?", 36, 300.0, 5L)
-        assertNull(evaluate(small, base + small).milestone) // 171, рубеж 250 не пройден
+        assertNull(evaluate(small, base + small).milestone) // 212, рубеж 250 не пройден
         val big = attempt("m2", Lang.EN, "long dictation", 115, 900.0, 6L)
-        val v = evaluate(big, base + big) // 250 ровно
+        val v = evaluate(big, base + big) // 291, пройден рубеж 250
         assertEquals(250, v.milestone)
         assertTrue(v.celebrate)
     }

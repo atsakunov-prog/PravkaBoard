@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -21,6 +22,8 @@ import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.Metric
 import ru.tsakunov.pravka.domain.LangStats
+import ru.tsakunov.pravka.domain.LengthStat
+import ru.tsakunov.pravka.domain.statsByLength
 import ru.tsakunov.pravka.domain.isToday
 import ru.tsakunov.pravka.domain.repeatRows
 import ru.tsakunov.pravka.domain.repeatSummary
@@ -32,13 +35,11 @@ import ru.tsakunov.pravka.ui.vm.AppViewModel
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private const val MAX_REPEAT_ROWS = 12
-
 @Composable
 fun ProgressScreen(vm: AppViewModel, onTab: (Tab) -> Unit) {
     val attempts by vm.attempts.collectAsStateWithLifecycle()
     val settings by vm.settingsState.collectAsStateWithLifecycle()
-    val metric = settings.metric
+    val metric = Metric.SEC_PER_LETTER
 
     var showPaper by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Attempt?>(null) }
@@ -87,29 +88,11 @@ fun ProgressScreen(vm: AppViewModel, onTab: (Tab) -> Unit) {
                 item {
                     PravkaCard {
                         Text("То же слово во второй раз", style = MaterialTheme.typography.titleMedium)
-                        repeatSummary(repeats)?.let { RepeatSummaryText(it, Modifier.padding(top = 4.dp, bottom = 8.dp)) }
-                        RepeatTable(repeats.take(MAX_REPEAT_ROWS))
-                        if (repeats.size > MAX_REPEAT_ROWS) {
-                            Text(
-                                "Показаны последние $MAX_REPEAT_ROWS из ${wordsWord(repeats.size)}. Полный список по каждому списку слов внутри него.",
-                                style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 6.dp),
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                    SingleChoiceSegmentedButtonRow {
-                        SegmentedButton(
-                            selected = metric == Metric.SEC_PER_LETTER, onClick = { vm.setMetric(Metric.SEC_PER_LETTER) },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2),
-                        ) { Text("секунд на букву") }
-                        SegmentedButton(
-                            selected = metric == Metric.LETTERS_PER_MIN, onClick = { vm.setMetric(Metric.LETTERS_PER_MIN) },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2),
-                        ) { Text("букв в минуту") }
+                        repeatSummary(repeats)?.let { RepeatSummaryText(it, Modifier.padding(top = 4.dp)) }
+                        Text(
+                            "Таблица по каждому слову лежит внутри урока.",
+                            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 6.dp),
+                        )
                     }
                 }
             }
@@ -182,6 +165,40 @@ private fun LangCard(lang: Lang, st: LangStats, attempts: List<Attempt>, metric:
         }
         Spacer(Modifier.height(10.dp))
         SpeedChart(attempts = attempts, metric = metric, color = lang.color())
+        val byLength = remember(attempts) { statsByLength(lang, attempts) }
+        if (byLength.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Text("Сколько уходит на слово", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            LengthTable(byLength)
+        }
+    }
+}
+
+private val lenHead = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = PravkaColors.Muted, letterSpacing = 0.4.sp)
+private val lenCell = TextStyle(fontSize = 14.sp, fontFeatureSettings = "tnum", color = PravkaColors.Ink)
+
+@Composable
+private fun LengthTable(rows: List<LengthStat>) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+            Text("СЛОВО ИЗ", style = lenHead, modifier = Modifier.weight(1f))
+            Text("СЛОВ", style = lenHead, textAlign = TextAlign.End, modifier = Modifier.width(48.dp))
+            Text("ОБЫЧНО", style = lenHead, textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
+            Text("ЛУЧШЕЕ", style = lenHead, textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
+            Text("С/Б", style = lenHead, textAlign = TextAlign.End, modifier = Modifier.width(44.dp))
+        }
+        HorizontalDivider(color = PravkaColors.Grid)
+        rows.forEach { r ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(lettersWord(r.letters), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(r.n.toString(), style = lenCell, textAlign = TextAlign.End, modifier = Modifier.width(48.dp))
+                Text(fmtTime(r.avgMs), style = lenCell, textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
+                Text(fmtTime(r.bestMs), style = lenCell.copy(fontWeight = FontWeight.Bold, color = PravkaColors.GoodText), textAlign = TextAlign.End, modifier = Modifier.width(64.dp))
+                Text(fmtNum(r.secPerLetter), style = lenCell, textAlign = TextAlign.End, modifier = Modifier.width(44.dp))
+            }
+            HorizontalDivider(color = PravkaColors.Grid)
+        }
     }
 }
 
