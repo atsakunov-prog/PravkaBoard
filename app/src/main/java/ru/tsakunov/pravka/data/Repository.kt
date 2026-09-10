@@ -23,6 +23,7 @@ class Repository(
     private val reading get() = db.readingDao()
     private val storyList get() = db.storyListDao()
     private val intake get() = db.intakeDao()
+    private val activity get() = db.activityDao()
 
     // ---- Наблюдение ----
     fun observeLists(): Flow<List<WordListWithCount>> = lists.observeLists()
@@ -287,6 +288,13 @@ class Repository(
             lists.clearLists()
             attempts.insertAll(Seed.attempts())
         }
+    }
+
+    // ---- Журнал занятий для общей статистики ----
+    fun observeActivity(): Flow<List<ActivityLog>> = activity.observeAll()
+    suspend fun logActivity(kind: String, refId: String?, durationMs: Long, total: Int, correct: Int) {
+        if (total <= 0) return
+        activity.insert(ActivityLog(id = newId(), ts = System.currentTimeMillis(), kind = kind, refId = refId, durationMs = durationMs.coerceAtLeast(0), total = total, correct = correct.coerceIn(0, total)))
     }
 
     // ---- Разбор всей домашки ----

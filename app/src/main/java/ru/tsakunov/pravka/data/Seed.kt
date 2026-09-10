@@ -16,15 +16,16 @@ import java.time.ZoneId
  * посев (REPLACE) безопасен для уже установленного приложения.
  */
 object Seed {
-    const val VERSION = 4
+    const val VERSION = 5
 
     private fun at(y: Int, m: Int, d: Int, h: Int, min: Int): Long =
         LocalDateTime.of(y, m, d, h, min).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     // Русский: слово и секунды. Первые два — с первого листка (9 сентября), остальные — добор 10 сентября.
-    private val ruDay1 = listOf("курица" to 44, "гусь" to 57)
+    // Версия 5: на листке у строки 0:25 стояла пометка «4 буквы», это гусь, а не прогулка; времена поменяны местами.
+    private val ruDay1 = listOf("курица" to 44, "гусь" to 25)
     private val ruDay2 = listOf(
-        "семя" to 37, "прогулка" to 25, "работа" to 48, "пшеница" to 48, "сажать" to 40,
+        "семя" to 37, "прогулка" to 57, "работа" to 48, "пшеница" to 48, "сажать" to 40,
         "делать" to 44, "растить" to 39, "резать" to 76, "теплый" to 57,
     )
 

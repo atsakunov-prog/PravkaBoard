@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.offset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import android.os.SystemClock
+import ru.tsakunov.pravka.data.ActivityLog
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.theme.PravkaColors
@@ -44,6 +46,17 @@ fun LearnScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onTeach: (
     val speaker = rememberSpeaker()
     var index by rememberSaveable { mutableIntStateOf(0) }
     var finished by rememberSaveable { mutableStateOf(false) }
+
+    // В журнал занятий: сколько карточек посмотрел и сколько времени провёл, пишется при уходе с экрана.
+    val startedAt = remember(listId) { SystemClock.elapsedRealtime() }
+    var maxIndex by remember(listId) { mutableIntStateOf(0) }
+    LaunchedEffect(index, finished) { maxIndex = maxOf(maxIndex, if (finished) items.size else index + 1) }
+    DisposableEffect(listId) {
+        onDispose {
+            val viewed = minOf(maxIndex, items.size)
+            if (viewed > 0) vm.logActivity(ActivityLog.KIND_LEARN, listId, SystemClock.elapsedRealtime() - startedAt, viewed, viewed)
+        }
+    }
 
     Scaffold(
         containerColor = PravkaColors.Page,

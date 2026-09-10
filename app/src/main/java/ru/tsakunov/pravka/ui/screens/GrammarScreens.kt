@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import android.os.SystemClock
+import ru.tsakunov.pravka.data.ActivityLog
 import ru.tsakunov.pravka.data.GrammarSet
 import ru.tsakunov.pravka.domain.Drill
 import ru.tsakunov.pravka.domain.GrammarSetContent
@@ -207,6 +209,16 @@ fun GrammarDrillScreen(vm: AppViewModel, setId: String, ruleIndex: Int, onBack: 
     var confetti by remember { mutableIntStateOf(0) }
     val p = progress.firstOrNull { it.ruleIndex == ruleIndex }
 
+    // Журнал занятий: ответов и верных за этот заход, пишется при уходе с экрана.
+    val startedAt = remember(setId, ruleIndex) { SystemClock.elapsedRealtime() }
+    var answered by remember(setId, ruleIndex) { mutableIntStateOf(0) }
+    var answeredCorrect by remember(setId, ruleIndex) { mutableIntStateOf(0) }
+    DisposableEffect(setId, ruleIndex) {
+        onDispose {
+            if (answered > 0) vm.logActivity(ActivityLog.KIND_GRAMMAR, setId, SystemClock.elapsedRealtime() - startedAt, answered, answeredCorrect)
+        }
+    }
+
     fun next() {
         revealed = false
         if (pos + 1 < order.size) pos++ else { order = order.shuffled(); pos = 0 }
@@ -215,6 +227,8 @@ fun GrammarDrillScreen(vm: AppViewModel, setId: String, ruleIndex: Int, onBack: 
     fun answer(correct: Boolean) {
         if (!revealed) return // второе нажатие, пока пишется ответ
         revealed = false
+        answered++
+        if (correct) answeredCorrect++
         val wasPassed = p?.passed == true
         scope.launch {
             val np = vm.recordGrammarAnswer(setId, ruleIndex, correct, streak)

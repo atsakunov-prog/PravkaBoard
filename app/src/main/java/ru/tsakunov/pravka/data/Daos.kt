@@ -232,3 +232,12 @@ interface IntakeDao {
     @Query("DELETE FROM intake_jobs WHERE id = :id")
     suspend fun delete(id: String)
 }
+
+@Dao
+interface ActivityDao {
+    @Query("SELECT * FROM activity_log ORDER BY ts ASC")
+    fun observeAll(): Flow<List<ActivityLog>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(log: ActivityLog)
+}

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ru.tsakunov.pravka.data.ActivityLog
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.theme.PravkaColors
@@ -45,6 +46,18 @@ fun TeachScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onTest: ()
     val current = queue.firstOrNull()?.let { id -> items.firstOrNull { it.id == id } }
     val total = items.size
     val done = total - queue.distinct().size
+
+    // Круг пройден: одна запись в журнал занятий (слов, сразу знал, время круга).
+    var roundStart by rememberSaveable(listId) { mutableLongStateOf(0L) }
+    var roundLogged by rememberSaveable(listId) { mutableStateOf(false) }
+    LaunchedEffect(current?.id, total) {
+        if (current != null && roundStart == 0L) roundStart = System.currentTimeMillis()
+        if (current == null && total > 0 && seen.isNotEmpty() && !roundLogged) {
+            roundLogged = true
+            val ms = if (roundStart > 0) System.currentTimeMillis() - roundStart else 0L
+            vm.logActivity(ActivityLog.KIND_TEACH, listId, ms, total, knownFirstTry)
+        }
+    }
 
     Scaffold(
         containerColor = PravkaColors.Page,
@@ -81,7 +94,7 @@ fun TeachScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onTest: ()
                 Spacer(Modifier.height(8.dp))
                 SecondaryButton(
                     "Ещё круг",
-                    onClick = { queue = items.map { it.id }; revealed = false; knownFirstTry = 0; repeats = 0; seen = emptySet() },
+                    onClick = { queue = items.map { it.id }; revealed = false; knownFirstTry = 0; repeats = 0; seen = emptySet(); roundStart = 0L; roundLogged = false },
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {

@@ -45,6 +45,7 @@ import ru.tsakunov.pravka.ui.screens.WordsScreen
 import ru.tsakunov.pravka.ui.screens.PracticeScreen
 import ru.tsakunov.pravka.ui.screens.ProgressScreen
 import ru.tsakunov.pravka.ui.screens.SettingsScreen
+import ru.tsakunov.pravka.ui.screens.StatsScreen
 import ru.tsakunov.pravka.ui.theme.PravkaTheme
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 
@@ -57,6 +58,7 @@ object Routes {
     const val PROGRESS = "progress"
     const val SETTINGS = "settings"
     const val INTAKE = "intake"
+    const val STATS = "stats"
     const val LIST = "list/{listId}"
     const val PRACTICE = "practice/{listId}/{itemId}/{lang}"
     const val WORDS_HUB = "words/{listId}"
@@ -82,7 +84,7 @@ object Routes {
     fun reading(id: String) = "texts/$id"
 
     fun tabRoute(tab: Tab) = when (tab) {
-        Tab.PROPISI -> HOME; Tab.WORDS -> WORDS; Tab.GRAMMAR -> GRAMMAR; Tab.HOMEWORK -> HOMEWORK; Tab.TEXT -> TEXTS
+        Tab.PROPISI -> HOME; Tab.WORDS -> WORDS; Tab.GRAMMAR -> GRAMMAR; Tab.HOMEWORK -> HOMEWORK; Tab.TEXT -> TEXTS; Tab.STATS -> STATS
     }
 }
 
@@ -140,6 +142,14 @@ fun PravkaRoot(app: PravkaApp) {
                 }
                 composable(Routes.PROGRESS) {
                     ProgressScreen(vm = vm, onBack = { nav.popBackStack() })
+                }
+                composable(Routes.STATS) {
+                    StatsScreen(
+                        vm = vm,
+                        onOpenProgress = { nav.navigate(Routes.PROGRESS) },
+                        onIntake = { nav.navigate(Routes.INTAKE) },
+                        onTab = { nav.switchTab(it) },
+                    )
                 }
                 composable(Routes.WORDS) {
                     WordsScreen(vm = vm, onOpenHub = { nav.navigate(Routes.wordsHub(it)) }, onIntake = { nav.navigate(Routes.INTAKE) }, onTab = { nav.switchTab(it) })

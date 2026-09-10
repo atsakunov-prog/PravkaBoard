@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
@@ -16,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,11 +81,16 @@ fun BackIcon(onBack: () -> Unit) {
 }
 
 enum class Tab(val label: String) {
-    PROPISI("Гармошка"), WORDS("Слова"), GRAMMAR("Грамматика"), HOMEWORK("Домашка"), TEXT("Текст")
+    PROPISI("Гармошка"), WORDS("Слова"), GRAMMAR("Грамматика"), HOMEWORK("Домашка"), TEXT("Текст"), STATS("Статистика")
 }
 
+/**
+ * Шесть вкладок: на узком экране подписи показываются только у выбранной (иначе «Грамматика» и «Статистика»
+ * не помещаются), на широком (раскрытый складной телефон, планшет) — у всех.
+ */
 @Composable
 fun PravkaBottomBar(current: Tab, onSelect: (Tab) -> Unit) {
+    val wide = LocalConfiguration.current.screenWidthDp >= 480
     NavigationBar(containerColor = PravkaColors.Surface, tonalElevation = 0.dp) {
         Tab.entries.forEach { tab ->
             NavigationBarItem(
@@ -97,11 +104,13 @@ fun PravkaBottomBar(current: Tab, onSelect: (Tab) -> Unit) {
                             Tab.GRAMMAR -> Icons.Filled.School
                             Tab.HOMEWORK -> Icons.Filled.AssignmentTurnedIn
                             Tab.TEXT -> Icons.Filled.MenuBook
+                            Tab.STATS -> Icons.Filled.BarChart
                         },
-                        contentDescription = null,
+                        contentDescription = tab.label,
                     )
                 },
                 label = { Text(tab.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, fontSize = 11.sp) },
+                alwaysShowLabel = wide,
                 colors = navColors(),
             )
         }

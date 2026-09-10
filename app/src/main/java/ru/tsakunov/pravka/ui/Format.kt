@@ -20,6 +20,19 @@ fun fmtTime(ms: Long, tenths: Boolean = false): String {
     return if (tenths) "$base,$t" else base
 }
 
+/** «1 ч 12 мин», «12 мин», «40 с» */
+fun fmtDuration(ms: Long): String {
+    val totalSec = (ms / 1000.0).roundToInt()
+    val h = totalSec / 3600
+    val m = totalSec % 3600 / 60
+    val s = totalSec % 60
+    return when {
+        h > 0 -> if (m > 0) "$h ч $m мин" else "$h ч"
+        m > 0 -> "$m мин"
+        else -> "$s с"
+    }
+}
+
 /** 7,5 */
 fun fmtNum(x: Double, digits: Int = 1): String =
     String.format(RU, "%.${digits}f", x).replace('.', ',')

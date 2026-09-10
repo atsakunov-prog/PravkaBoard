@@ -244,3 +244,28 @@ data class IntakeJob(
         const val ERROR = "error"
     }
 }
+
+/**
+ * Журнал занятий, у которых нет своей таблицы: обучалка (learn), училка (teach), тренажёр грамматики (grammar).
+ * Нужен для общей статистики: сколько времени учил, сколько карточек и ответов, сколько верно.
+ */
+@Entity(tableName = "activity_log", indices = [Index("ts"), Index("kind")])
+data class ActivityLog(
+    @PrimaryKey val id: String,
+    /** Момент окончания занятия. */
+    val ts: Long,
+    val kind: String,
+    /** id урока или темы. */
+    val refId: String?,
+    val durationMs: Long,
+    /** Карточек просмотрено, слов в круге, ответов в тренажёре. */
+    val total: Int,
+    /** Сразу знал, верных ответов; для обучалки равно total. */
+    val correct: Int,
+) {
+    companion object {
+        const val KIND_LEARN = "learn"
+        const val KIND_TEACH = "teach"
+        const val KIND_GRAMMAR = "grammar"
+    }
+}

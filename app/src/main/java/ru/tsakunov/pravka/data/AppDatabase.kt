@@ -10,13 +10,13 @@ import androidx.room.RoomDatabase
     entities = [
         WordList::class, WordItem::class, Attempt::class, Story::class, QuizRun::class,
         Homework::class, HomeworkCheck::class, GrammarSet::class, GrammarProgress::class,
-        ReadingText::class, ReadingRun::class, IntakeJob::class,
+        ReadingText::class, ReadingRun::class, IntakeJob::class, ActivityLog::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4),
-        AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6), AutoMigration(from = 6, to = 7),
     ],
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun readingDao(): ReadingDao
     abstract fun storyListDao(): StoryListDao
     abstract fun intakeDao(): IntakeDao
+    abstract fun activityDao(): ActivityDao
 
     companion object {
         fun build(context: Context): AppDatabase =

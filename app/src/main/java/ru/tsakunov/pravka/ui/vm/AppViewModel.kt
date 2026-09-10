@@ -104,6 +104,12 @@ class AppViewModel(
     sorter: ClaudeSorter,
 ) : ViewModel() {
 
+    // ---- Журнал занятий (обучалка, училка, тренажёр) для общей статистики ----
+    val activity = repo.observeActivity().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun logActivity(kind: String, refId: String?, durationMs: Long, total: Int, correct: Int) = viewModelScope.launch {
+        repo.logActivity(kind, refId, durationMs, total, correct)
+    }
+
     // ---- Вся домашка одним пакетом фото ----
     val intake = IntakeCoordinator(viewModelScope, repo, settings, api, batch, sorter, parser, grammarBuilder, homeworkChecker, readingExtractor)
     fun setBatchMode(on: Boolean) = settings.setBatchMode(on)
