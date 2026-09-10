@@ -4,6 +4,9 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import org.json.JSONArray
 import org.json.JSONObject
+import ru.tsakunov.pravka.domain.GrammarSetContent
+import ru.tsakunov.pravka.domain.HomeworkResult
+import ru.tsakunov.pravka.domain.countWords
 import java.util.UUID
 
 class Repository(
@@ -14,6 +17,10 @@ class Repository(
     private val attempts get() = db.attemptDao()
     private val stories get() = db.storyDao()
     private val quizRuns get() = db.quizRunDao()
+    private val homeworks get() = db.homeworkDao()
+    private val grammar get() = db.grammarDao()
+    private val reading get() = db.readingDao()
+    private val storyList get() = db.storyListDao()
 
     // ---- Наблюдение ----
     fun observeLists(): Flow<List<WordListWithCount>> = lists.observeLists()
@@ -107,6 +114,82 @@ class Repository(
         quizRuns.insert(run)
         return run
     }
+
+    // ---- Домашка ----
+    fun observeHomeworks(): Flow<List<Homework>> = homeworks.observeAll()
+    fun observeHomework(id: String): Flow<Homework?> = homeworks.observe(id)
+    fun observeHomeworkChecks(id: String): Flow<List<HomeworkCheck>> = homeworks.observeChecks(id)
+    fun observeAllHomeworkChecks(): Flow<List<HomeworkCheck>> = homeworks.observeAllChecks()
+
+    /** Сохраняет проверку; если homeworkId == null, создаёт новую домашку. Возвращает её id. */
+    suspend fun saveHomeworkCheck(homeworkId: String?, result: HomeworkResult): String {
+        val now = System.currentTimeMillis()
+        val id = homeworkId ?: newId()
+        db.withTransaction {
+            if (homeworkId == null) homeworks.insert(Homework(id = id, title = result.title, createdAt = now, updatedAt = now))
+            else homeworks.touch(id, now)
+            val attempt = homeworks.lastAttempt(id) + 1
+            homeworks.insertCheck(
+                HomeworkCheck(id = newId(), homeworkId = id, ts = now, attemptNo = attempt, correct = result.correct, total = result.total, resultJson = result.toJson()),
+            )
+        }
+        return id
+    }
+
+    suspend fun deleteHomework(id: String) = homeworks.delete(id)
+
+    // ---- Грамматика ----
+    fun observeGrammarSets(): Flow<List<GrammarSet>> = grammar.observeSets()
+    fun observeGrammarSet(id: String): Flow<GrammarSet?> = grammar.observeSet(id)
+    fun observeGrammarProgress(setId: String): Flow<List<GrammarProgress>> = grammar.observeProgress(setId)
+    fun observeAllGrammarProgress(): Flow<List<GrammarProgress>> = grammar.observeAllProgress()
+
+    suspend fun saveGrammarSet(content: GrammarSetContent): GrammarSet {
+        val set = GrammarSet(id = newId(), title = content.title, createdAt = System.currentTimeMillis(), contentJson = content.toJson())
+        grammar.insertSet(set)
+        return set
+    }
+
+    suspend fun deleteGrammarSet(id: String) = grammar.deleteSet(id)
+
+    /** Записывает ответ по карточке уровня; возвращает обновлённый прогресс (passed выставляется при серии из STREAK_TO_PASS). */
+    suspend fun recordGrammarAnswer(setId: String, ruleIndex: Int, correct: Boolean, currentStreak: Int): GrammarProgress {
+        val prev = grammar.getProgress(setId, ruleIndex)
+        val streak = if (correct) currentStreak + 1 else 0
+        val p = GrammarProgress(
+            setId = setId, ruleIndex = ruleIndex,
+            passed = (prev?.passed ?: false) || streak >= GrammarSetContent.STREAK_TO_PASS,
+            bestStreak = maxOf(prev?.bestStreak ?: 0, streak),
+            correct = (prev?.correct ?: 0) + if (correct) 1 else 0,
+            total = (prev?.total ?: 0) + 1,
+            updatedAt = System.currentTimeMillis(),
+        )
+        grammar.upsertProgress(p)
+        return p
+    }
+
+    // ---- Чтение ----
+    fun observeReadingTexts(): Flow<List<ReadingText>> = reading.observeTexts()
+    fun observeReadingText(id: String): Flow<ReadingText?> = reading.observeText(id)
+    fun observeReadingRuns(): Flow<List<ReadingRun>> = reading.observeAllRuns()
+    fun observeAllStories(): Flow<List<Story>> = storyList.observeAllStories()
+    fun observeStoryById(id: String): Flow<Story?> = storyList.observeStoryById(id)
+
+    suspend fun saveReadingText(title: String, textEn: String, textRu: String): ReadingText {
+        val t = ReadingText(id = newId(), title = title, textEn = textEn, textRu = textRu, words = countWords(textEn), createdAt = System.currentTimeMillis())
+        reading.insertText(t)
+        return t
+    }
+
+    suspend fun deleteReadingText(id: String) = reading.deleteText(id)
+
+    suspend fun addReadingRun(textId: String, durationMs: Long, stumbles: Int, words: Int): ReadingRun {
+        val run = ReadingRun(id = newId(), textId = textId, ts = System.currentTimeMillis(), durationMs = durationMs, stumbles = stumbles, words = words)
+        reading.insertRun(run)
+        return run
+    }
+
+    suspend fun deleteReadingRun(id: String) = reading.deleteRun(id)
 
     // ---- Резервная копия ----
     suspend fun exportJson(): String {

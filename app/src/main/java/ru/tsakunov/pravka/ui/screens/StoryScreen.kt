@@ -115,9 +115,10 @@ fun StoryScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
 private fun HighlightedText(text: String, words: List<String>) {
     val keys = remember(words) { words.mapNotNull { normalizeWord(it) }.filter { it.isNotBlank() }.sortedByDescending { it.length } }
     val annotated = remember(text, keys) {
-        val lower = text.lowercase()
+        val lower = text.lowercase(java.util.Locale.ROOT)
         val marks = BooleanArray(text.length)
-        for (k in keys) {
+        // Если длина после lowercase изменилась (редкие символы), подсветку пропускаем.
+        for (k in if (lower.length == text.length) keys else emptyList()) {
             var from = 0
             while (true) {
                 val i = lower.indexOf(k, from)

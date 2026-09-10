@@ -17,7 +17,7 @@ class ClaudeStory(private val api: ClaudeApi) {
             append("Сочини рассказ по правилам и сохрани его инструментом save_story.")
             if (previousTitle != null) append(" Прошлый рассказ назывался «$previousTitle», сделай совсем другой сюжет.")
         }
-        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, JSONArray().put(ClaudeApi.textBlock(ask)), tool(), maxTokens = 4000)
+        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, JSONArray().put(ClaudeApi.textBlock(ask)), tool(), maxTokens = 8000)
         val en = input.optString("text_en").trim()
         if (en.isEmpty()) throw ClaudeException("Модель не вернула текст рассказа")
         return GeneratedStory(input.optString("title").trim().ifBlank { "Рассказ" }, en, input.optString("text_ru").trim())

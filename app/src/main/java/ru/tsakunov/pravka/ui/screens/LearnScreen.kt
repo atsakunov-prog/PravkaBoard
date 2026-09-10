@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.offset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.ui.components.*
@@ -38,7 +39,7 @@ import kotlin.math.roundToInt
 /** Обучалка: карточка «слово + перевод», смахивание влево/вправо, озвучка. */
 @Composable
 fun LearnScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onTeach: () -> Unit) {
-    val all by vm.observeItems(listId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val all by remember(listId) { vm.observeItems(listId) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(all) { all.filter { it.en.isNotBlank() && it.ru.isNotBlank() } }
     val speaker = rememberSpeaker()
     var index by rememberSaveable { mutableIntStateOf(0) }
@@ -78,12 +79,18 @@ fun LearnScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onTeach: (
                 Spacer(Modifier.height(8.dp))
                 SecondaryButton("Ещё раз с начала", onClick = { index = 0; finished = false }, modifier = Modifier.fillMaxWidth())
             } else {
-                val item = items[index]
+                val item = items.getOrNull(index)
+                if (item == null) { LaunchedEffect(Unit) { index = 0 }; return@Column }
                 SwipeCard(
                     key = item.id,
                     onSwiped = { dir ->
                         speaker.stop()
-                        if (dir > 0) { if (index > 0) index-- } else { if (index + 1 < items.size) index++ else finished = true }
+                        if (dir > 0) {
+                            if (index > 0) { index--; true } else false
+                        } else {
+                            if (index + 1 < items.size) index++ else finished = true
+                            true
+                        }
                     },
                 ) {
                     LearnCardContent(item, onSpeak = { speaker.speak(item.en) })
@@ -132,9 +139,9 @@ private fun LearnCardContent(item: WordItem, onSpeak: () -> Unit) {
     }
 }
 
-/** Карточка со смахиванием: onSwiped(+1) при смахивании вправо, onSwiped(-1) влево. */
+/** Карточка со смахиванием: onSwiped(+1) вправо, onSwiped(-1) влево; вернуть false, если смахивать некуда. */
 @Composable
-fun SwipeCard(key: Any, onSwiped: (Int) -> Unit, content: @Composable () -> Unit) {
+fun SwipeCard(key: Any, onSwiped: (Int) -> Boolean, content: @Composable () -> Unit) {
     val offsetX = remember(key) { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var width by remember { mutableIntStateOf(1) }
@@ -151,16 +158,20 @@ fun SwipeCard(key: Any, onSwiped: (Int) -> Unit, content: @Composable () -> Unit
                         val v = offsetX.value
                         scope.launch {
                             if (abs(v) > threshold) {
-                                offsetX.animateTo(if (v > 0) width * 1.2f else -width * 1.2f, tween(180))
-                                onSwiped(if (v > 0) 1 else -1)
-                                offsetX.snapTo(0f)
+                                val dir = if (v > 0) 1 else -1
+                                // Сначала спрашиваем, есть ли куда листать, и только тогда улетаем.
+                                if (onSwiped(dir)) {
+                                    offsetX.snapTo(0f)
+                                } else {
+                                    offsetX.animateTo(0f, tween(200))
+                                }
                             } else {
                                 offsetX.animateTo(0f, tween(200))
                             }
                         }
                     },
                     onDragCancel = { scope.launch { offsetX.animateTo(0f, tween(200)) } },
-                ) { _, dragAmount -> scope.launch { offsetX.snapTo(offsetX.value + dragAmount) } }
+                ) { _, dragAmount -> scope.launch(start = CoroutineStart.UNDISPATCHED) { offsetX.snapTo(offsetX.value + dragAmount) } }
             },
         shape = MaterialTheme.shapes.extraLarge,
         color = PravkaColors.Surface,

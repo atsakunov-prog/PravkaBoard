@@ -12,6 +12,9 @@ import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.api.ClaudeApi
 import ru.tsakunov.pravka.api.ClaudeException
+import ru.tsakunov.pravka.api.ClaudeGrammar
+import ru.tsakunov.pravka.api.ClaudeReading
+import ru.tsakunov.pravka.api.ClaudeHomework
 import ru.tsakunov.pravka.api.ClaudeJudge
 import ru.tsakunov.pravka.api.ClaudeStory
 import ru.tsakunov.pravka.api.ClaudeVocabParser
@@ -26,6 +29,9 @@ import ru.tsakunov.pravka.data.Repository
 import ru.tsakunov.pravka.data.Settings
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.data.WordList
+import ru.tsakunov.pravka.data.GrammarProgress
+import ru.tsakunov.pravka.data.ReadingRun
+import ru.tsakunov.pravka.domain.HomeworkResult
 import ru.tsakunov.pravka.domain.countLetters
 
 sealed interface UpdateState {
@@ -36,6 +42,27 @@ sealed interface UpdateState {
     data class Downloading(val info: UpdateInfo, val progress: Float) : UpdateState
     data class Ready(val info: UpdateInfo, val file: File) : UpdateState
     data class Error(val message: String) : UpdateState
+}
+
+sealed interface GrammarState {
+    data object Idle : GrammarState
+    data class Running(val photos: Int) : GrammarState
+    data class Error(val message: String) : GrammarState
+    data class Done(val setId: String) : GrammarState
+}
+
+sealed interface ReadingState {
+    data object Idle : ReadingState
+    data class Running(val photos: Int) : ReadingState
+    data class Error(val message: String) : ReadingState
+    data class Done(val textId: String) : ReadingState
+}
+
+sealed interface HomeworkState {
+    data object Idle : HomeworkState
+    data class Running(val photos: Int) : HomeworkState
+    data class Error(val message: String) : HomeworkState
+    data class Done(val homeworkId: String, val result: HomeworkResult) : HomeworkState
 }
 
 sealed interface StoryState {
@@ -58,12 +85,105 @@ class AppViewModel(
     private val updater: Updater,
     private val storyGen: ClaudeStory,
     private val judge: ClaudeJudge,
+    private val homeworkChecker: ClaudeHomework,
+    private val grammarBuilder: ClaudeGrammar,
+    private val readingExtractor: ClaudeReading,
 ) : ViewModel() {
+
+    // ---- Грамматика ----
+    val grammarSets = repo.observeGrammarSets().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val grammarProgress = repo.observeAllGrammarProgress().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun observeGrammarSet(id: String) = cached("gs:$id") { repo.observeGrammarSet(id) }
+    fun observeGrammarProgress(setId: String) = cached("gp:$setId") { repo.observeGrammarProgress(setId) }
+
+    private val _grammar = MutableStateFlow<GrammarState>(GrammarState.Idle)
+    val grammarState: StateFlow<GrammarState> = _grammar
+
+    fun buildGrammar(uris: List<Uri>) {
+        if (uris.isEmpty() || _grammar.value is GrammarState.Running) return
+        val s = settings.state.value
+        _grammar.value = GrammarState.Running(uris.size)
+        viewModelScope.launch {
+            try {
+                val content = grammarBuilder.build(uris, s.apiKey, s.model)
+                val set = repo.saveGrammarSet(content)
+                _grammar.value = GrammarState.Done(set.id)
+            } catch (e: ClaudeException) {
+                _grammar.value = GrammarState.Error(e.message ?: "Ошибка")
+            } catch (e: Exception) {
+                _grammar.value = GrammarState.Error("Что-то пошло не так: ${e.javaClass.simpleName} ${e.message ?: ""}".trim())
+            }
+        }
+    }
+    fun grammarHandled() { _grammar.value = GrammarState.Idle }
+    fun deleteGrammarSet(id: String) = viewModelScope.launch { repo.deleteGrammarSet(id) }
+    suspend fun recordGrammarAnswer(setId: String, ruleIndex: Int, correct: Boolean, streak: Int): GrammarProgress =
+        repo.recordGrammarAnswer(setId, ruleIndex, correct, streak)
+
+    // ---- Чтение ----
+    val readingTexts = repo.observeReadingTexts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val readingRuns = repo.observeReadingRuns().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val allStories = repo.observeAllStories().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun observeReadingText(id: String) = cached("rt:$id") { repo.observeReadingText(id) }
+    fun observeStoryById(id: String) = cached("sb:$id") { repo.observeStoryById(id) }
+
+    private val _reading = MutableStateFlow<ReadingState>(ReadingState.Idle)
+    val readingState: StateFlow<ReadingState> = _reading
+
+    fun extractReading(uris: List<Uri>) {
+        if (uris.isEmpty() || _reading.value is ReadingState.Running) return
+        val s = settings.state.value
+        _reading.value = ReadingState.Running(uris.size)
+        viewModelScope.launch {
+            try {
+                val t = readingExtractor.extract(uris, s.apiKey, s.model)
+                val saved = repo.saveReadingText(t.title, t.textEn, t.textRu)
+                _reading.value = ReadingState.Done(saved.id)
+            } catch (e: ClaudeException) {
+                _reading.value = ReadingState.Error(e.message ?: "Ошибка")
+            } catch (e: Exception) {
+                _reading.value = ReadingState.Error("Что-то пошло не так: ${e.javaClass.simpleName} ${e.message ?: ""}".trim())
+            }
+        }
+    }
+    fun readingHandled() { _reading.value = ReadingState.Idle }
+    fun deleteReadingText(id: String) = viewModelScope.launch { repo.deleteReadingText(id) }
+    suspend fun saveReadingRun(textId: String, durationMs: Long, stumbles: Int, words: Int): ReadingRun = repo.addReadingRun(textId, durationMs, stumbles, words)
+    fun deleteReadingRun(id: String) = viewModelScope.launch { repo.deleteReadingRun(id) }
+
+    // ---- Домашка ----
+    val homeworks = repo.observeHomeworks().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val homeworkChecks = repo.observeAllHomeworkChecks().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    fun observeHomework(id: String) = cached("hw:$id") { repo.observeHomework(id) }
+    fun observeHomeworkChecks(id: String) = cached("hwc:$id") { repo.observeHomeworkChecks(id) }
+
+    private val _homework = MutableStateFlow<HomeworkState>(HomeworkState.Idle)
+    val homeworkState: StateFlow<HomeworkState> = _homework
+
+    /** Проверка домашки. homeworkId == null — новая работа, иначе повторная проверка после исправлений. */
+    fun checkHomework(uris: List<Uri>, homeworkId: String?, previous: HomeworkResult?) {
+        if (uris.isEmpty() || _homework.value is HomeworkState.Running) return
+        val s = settings.state.value
+        _homework.value = HomeworkState.Running(uris.size)
+        viewModelScope.launch {
+            try {
+                val result = homeworkChecker.check(uris, previous, s.apiKey, s.model)
+                val id = repo.saveHomeworkCheck(homeworkId, result)
+                _homework.value = HomeworkState.Done(id, result)
+            } catch (e: ClaudeException) {
+                _homework.value = HomeworkState.Error(e.message ?: "Ошибка")
+            } catch (e: Exception) {
+                _homework.value = HomeworkState.Error("Что-то пошло не так: ${e.javaClass.simpleName} ${e.message ?: ""}".trim())
+            }
+        }
+    }
+    fun homeworkHandled() { _homework.value = HomeworkState.Idle }
+    fun deleteHomework(id: String) = viewModelScope.launch { repo.deleteHomework(id) }
 
     // ---- Слова: рассказ, контроша, судья ----
     val quizRuns = repo.observeAllQuizRuns().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    fun observeQuizRuns(listId: String) = repo.observeQuizRuns(listId)
-    fun observeStory(listId: String) = repo.observeStory(listId)
+    fun observeQuizRuns(listId: String) = cached("quiz:$listId") { repo.observeQuizRuns(listId) }
+    fun observeStory(listId: String) = cached("story:$listId") { repo.observeStory(listId) }
 
     private val _story = MutableStateFlow<StoryState>(StoryState.Idle)
     val storyState: StateFlow<StoryState> = _story
@@ -157,8 +277,15 @@ class AppViewModel(
     fun toastShown() { _toast.value = null }
     fun showToast(msg: String) { _toast.value = msg }
 
-    fun observeList(id: String) = repo.observeList(id)
-    fun observeItems(listId: String) = repo.observeItems(listId)
+    // Потоки по идентификатору кэшируются: collectAsStateWithLifecycle пересобирается при смене
+    // экземпляра Flow, а Repository возвращал бы новый на каждую перекомпозицию.
+    private val flowCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> cached(key: String, make: () -> kotlinx.coroutines.flow.Flow<T>): kotlinx.coroutines.flow.Flow<T> =
+        flowCache.getOrPut(key) { make() } as kotlinx.coroutines.flow.Flow<T>
+
+    fun observeList(id: String) = cached("list:$id") { repo.observeList(id) }
+    fun observeItems(listId: String) = cached("items:$listId") { repo.observeItems(listId) }
 
     // ---- Фото → список ----
     fun parsePhotos(uris: List<Uri>) {
@@ -233,7 +360,11 @@ class AppViewModel(
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             ClaudeApi().let { api ->
-                AppViewModel(app.repository, app.settings, ClaudeVocabParser(app, api), Updater(app), ClaudeStory(api), ClaudeJudge(api)) as T
+                AppViewModel(
+                    app.repository, app.settings, ClaudeVocabParser(app, api), Updater(app),
+                    ClaudeStory(api), ClaudeJudge(api), ClaudeHomework(app, api),
+                    ClaudeGrammar(app, api), ClaudeReading(app, api),
+                ) as T
             }
     }
 }

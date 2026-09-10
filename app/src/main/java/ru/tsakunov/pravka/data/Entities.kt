@@ -111,3 +111,85 @@ data class QuizRun(
     val durationMs: Long,
     val words: Int,
 )
+
+/** Домашнее задание: одна тетрадная работа, проверяется несколько раз. */
+@Entity(tableName = "homeworks")
+data class Homework(
+    @PrimaryKey val id: String,
+    val title: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+/** Одна проверка домашки по фото. */
+@Entity(
+    tableName = "homework_checks",
+    foreignKeys = [
+        ForeignKey(entity = Homework::class, parentColumns = ["id"], childColumns = ["homeworkId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("homeworkId")],
+)
+data class HomeworkCheck(
+    @PrimaryKey val id: String,
+    val homeworkId: String,
+    val ts: Long,
+    /** 1 — первая проверка, 2 — после исправлений и т.д. */
+    val attemptNo: Int,
+    val correct: Int,
+    val total: Int,
+    /** HomeworkResult в JSON. */
+    val resultJson: String,
+)
+
+/** Набор правил с одной страницы учебника, разобранный на уровни. */
+@Entity(tableName = "grammar_sets")
+data class GrammarSet(
+    @PrimaryKey val id: String,
+    val title: String,
+    val createdAt: Long,
+    /** GrammarSetContent в JSON. */
+    val contentJson: String,
+)
+
+/** Прогресс по уровню (правилу) набора. */
+@Entity(
+    tableName = "grammar_progress",
+    primaryKeys = ["setId", "ruleIndex"],
+    foreignKeys = [
+        ForeignKey(entity = GrammarSet::class, parentColumns = ["id"], childColumns = ["setId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("setId")],
+)
+data class GrammarProgress(
+    val setId: String,
+    val ruleIndex: Int,
+    val passed: Boolean,
+    val bestStreak: Int,
+    val correct: Int,
+    val total: Int,
+    val updatedAt: Long,
+)
+
+/** Текст для чтения на время: страницы книжки с фото. Рассказы Opus читаются из таблицы stories. */
+@Entity(tableName = "reading_texts")
+data class ReadingText(
+    @PrimaryKey val id: String,
+    val title: String,
+    val textEn: String,
+    val textRu: String,
+    val words: Int,
+    val createdAt: Long,
+)
+
+/** Одно чтение текста: время и число запинок. textId — из reading_texts или stories. */
+@Entity(tableName = "reading_runs", indices = [Index("textId"), Index("ts")])
+data class ReadingRun(
+    @PrimaryKey val id: String,
+    val textId: String,
+    val ts: Long,
+    val durationMs: Long,
+    val stumbles: Int,
+    val words: Int,
+) {
+    val wordsPerMinute: Double get() = words / (durationMs / 60_000.0)
+}

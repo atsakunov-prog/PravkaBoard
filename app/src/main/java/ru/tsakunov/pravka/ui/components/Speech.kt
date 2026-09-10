@@ -16,13 +16,18 @@ import java.util.Locale
 /** Озвучка слов и текстов голосом Android (без сети, движок Google TTS). */
 class Speaker(context: Context) {
     private var ready = false
+    private var pending: Triple<String, Locale, Boolean>? = null
     private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
         ready = status == TextToSpeech.SUCCESS
+        // Движок поднимается 0,5–3 с: фраза, запрошенная до этого, произносится, как только он готов.
+        pending?.let { (t, l, s) -> pending = null; speak(t, l, s) }
     }
 
     fun speak(text: String, locale: Locale = Locale.US, slow: Boolean = true) {
-        if (!ready || text.isBlank()) return
-        tts.language = locale
+        if (text.isBlank()) return
+        if (!ready) { pending = Triple(text, locale, slow); return }
+        val lang = tts.setLanguage(locale)
+        if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) return
         tts.setSpeechRate(if (slow) 0.85f else 1.0f)
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pravka-${System.currentTimeMillis()}")
     }
@@ -39,7 +44,11 @@ fun rememberSpeaker(): Speaker {
     return speaker
 }
 
-/** Обёртка над SpeechRecognizer: слушает одну реплику и отдаёт варианты расшифровки. */
+/**
+ * Обёртка над SpeechRecognizer: слушает одну реплику и отдаёт варианты расшифровки.
+ * Распознаватель создаётся один раз и переиспользуется (cancel между репликами):
+ * пересоздание на каждую реплику даёт ERROR_RECOGNIZER_BUSY на Android 12–14.
+ */
 class SpeechInput(private val context: Context) {
     private var recognizer: SpeechRecognizer? = null
 
@@ -51,9 +60,8 @@ class SpeechInput(private val context: Context) {
         onResult: (List<String>) -> Unit,
         onError: (Int) -> Unit,
     ) {
-        stop()
-        val r = SpeechRecognizer.createSpeechRecognizer(context)
-        recognizer = r
+        val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { recognizer = it }
+        runCatching { r.cancel() }
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
@@ -81,7 +89,13 @@ class SpeechInput(private val context: Context) {
         r.startListening(intent)
     }
 
+    /** Прервать текущее прослушивание, распознаватель остаётся готовым к следующему. */
     fun stop() {
+        recognizer?.let { runCatching { it.cancel() } }
+    }
+
+    /** Освободить распознаватель при уходе с экрана. */
+    fun release() {
         recognizer?.let { runCatching { it.cancel(); it.destroy() } }
         recognizer = null
     }
@@ -99,6 +113,7 @@ class SpeechInput(private val context: Context) {
         }
 
         fun isRetryable(code: Int): Boolean =
-            code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || code == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
+            code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                code == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || code == SpeechRecognizer.ERROR_CLIENT
     }
 }

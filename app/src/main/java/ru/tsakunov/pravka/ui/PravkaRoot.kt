@@ -25,10 +25,16 @@ import androidx.navigation.compose.rememberNavController
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.ui.components.Tab
+import ru.tsakunov.pravka.ui.screens.GrammarDrillScreen
+import ru.tsakunov.pravka.ui.screens.GrammarListScreen
+import ru.tsakunov.pravka.ui.screens.GrammarSetScreen
 import ru.tsakunov.pravka.ui.screens.HomeScreen
+import ru.tsakunov.pravka.ui.screens.ReadingListScreen
+import ru.tsakunov.pravka.ui.screens.ReadingScreen
+import ru.tsakunov.pravka.ui.screens.HomeworkListScreen
+import ru.tsakunov.pravka.ui.screens.HomeworkScreen
 import ru.tsakunov.pravka.ui.screens.LearnScreen
 import ru.tsakunov.pravka.ui.screens.ListScreen
-import ru.tsakunov.pravka.ui.screens.PlaceholderScreen
 import ru.tsakunov.pravka.ui.screens.StoryScreen
 import ru.tsakunov.pravka.ui.screens.TeachScreen
 import ru.tsakunov.pravka.ui.screens.TestScreen
@@ -55,6 +61,10 @@ object Routes {
     const val TEACH = "teach/{listId}"
     const val TEST = "test/{listId}"
     const val STORY = "story/{listId}"
+    const val HOMEWORK_ITEM = "homework/{homeworkId}"
+    const val GRAMMAR_SET = "grammar/{setId}"
+    const val GRAMMAR_DRILL = "grammar/{setId}/{ruleIndex}"
+    const val READING_ITEM = "texts/{textId}"
 
     fun list(id: String) = "list/$id"
     fun practice(listId: String, itemId: String, lang: Lang) = "practice/$listId/$itemId/${lang.code}"
@@ -63,6 +73,10 @@ object Routes {
     fun teach(id: String) = "teach/$id"
     fun test(id: String) = "test/$id"
     fun story(id: String) = "story/$id"
+    fun homework(id: String) = "homework/$id"
+    fun grammarSet(id: String) = "grammar/$id"
+    fun grammarDrill(id: String, ruleIndex: Int) = "grammar/$id/$ruleIndex"
+    fun reading(id: String) = "texts/$id"
 
     fun tabRoute(tab: Tab) = when (tab) {
         Tab.PROPISI -> HOME; Tab.WORDS -> WORDS; Tab.GRAMMAR -> GRAMMAR; Tab.HOMEWORK -> HOMEWORK; Tab.TEXT -> TEXTS
@@ -142,13 +156,30 @@ fun PravkaRoot(app: PravkaApp) {
                     StoryScreen(vm = vm, listId = listId, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.GRAMMAR) {
-                    PlaceholderScreen(Tab.GRAMMAR, "Фото страницы с правилом превратится в тренажёр: слово на экране, Боря говорит форму, папа отмечает верно или нет. Уровни по правилам, пять верных подряд открывают следующий.", onTab = { nav.switchTab(it) })
+                    GrammarListScreen(vm = vm, onOpen = { nav.navigate(Routes.grammarSet(it)) }, onTab = { nav.switchTab(it) })
+                }
+                composable(Routes.GRAMMAR_SET) { entry ->
+                    val id = entry.arguments?.getString("setId") ?: return@composable
+                    GrammarSetScreen(vm = vm, setId = id, onBack = { nav.popBackStack() }, onDrill = { nav.navigate(Routes.grammarDrill(id, it)) })
+                }
+                composable(Routes.GRAMMAR_DRILL) { entry ->
+                    val id = entry.arguments?.getString("setId") ?: return@composable
+                    val ruleIndex = entry.arguments?.getString("ruleIndex")?.toIntOrNull() ?: return@composable
+                    GrammarDrillScreen(vm = vm, setId = id, ruleIndex = ruleIndex, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.HOMEWORK) {
-                    PlaceholderScreen(Tab.HOMEWORK, "Фото сделанной домашки: Opus проверит и подсветит красным, что не так. После исправления второе фото, а если ошибка осталась, появится подсказка с объяснением.", onTab = { nav.switchTab(it) })
+                    HomeworkListScreen(vm = vm, onOpen = { nav.navigate(Routes.homework(it)) }, onTab = { nav.switchTab(it) })
+                }
+                composable(Routes.HOMEWORK_ITEM) { entry ->
+                    val id = entry.arguments?.getString("homeworkId") ?: return@composable
+                    HomeworkScreen(vm = vm, homeworkId = id, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.TEXTS) {
-                    PlaceholderScreen(Tab.TEXT, "Фото страниц книжки: чтение на время, слова в минуту, кнопка запинки, прогресс по книге. Сюда же попадут рассказы Opus на словах урока.", onTab = { nav.switchTab(it) })
+                    ReadingListScreen(vm = vm, onOpen = { nav.navigate(Routes.reading(it)) }, onTab = { nav.switchTab(it) })
+                }
+                composable(Routes.READING_ITEM) { entry ->
+                    val id = entry.arguments?.getString("textId") ?: return@composable
+                    ReadingScreen(vm = vm, textId = id, onBack = { nav.popBackStack() })
                 }
                 composable(Routes.SETTINGS) {
                     SettingsScreen(vm = vm, onBack = { nav.popBackStack() })

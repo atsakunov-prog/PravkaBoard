@@ -14,6 +14,9 @@ val MILESTONES = listOf(100, 250, 500, 1000, 2000, 3000, 5000, 10000)
 /** Считаем только буквы: пробелы, дефисы, апострофы и знаки препинания не в счёт. */
 fun countLetters(text: String): Int = text.count { it.isLetter() }
 
+/** Слова для скорости чтения: последовательности букв и цифр, «can't» — одно слово. */
+fun countWords(text: String): Int = Regex("[\\p{L}\\p{N}]+(?:['’][\\p{L}]+)?").findAll(text).count()
+
 fun isToday(ts: Long): Boolean =
     Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalDate() == LocalDate.now()
 

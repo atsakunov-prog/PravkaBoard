@@ -115,3 +115,93 @@ interface QuizRunDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(run: QuizRun)
 }
+
+@Dao
+interface HomeworkDao {
+    @Query("SELECT * FROM homeworks ORDER BY updatedAt DESC")
+    fun observeAll(): Flow<List<Homework>>
+
+    @Query("SELECT * FROM homeworks WHERE id = :id")
+    fun observe(id: String): Flow<Homework?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(homework: Homework)
+
+    @Query("UPDATE homeworks SET updatedAt = :ts WHERE id = :id")
+    suspend fun touch(id: String, ts: Long)
+
+    @Query("DELETE FROM homeworks WHERE id = :id")
+    suspend fun delete(id: String)
+
+    @Query("SELECT * FROM homework_checks WHERE homeworkId = :homeworkId ORDER BY attemptNo ASC")
+    fun observeChecks(homeworkId: String): Flow<List<HomeworkCheck>>
+
+    @Query("SELECT * FROM homework_checks ORDER BY ts DESC")
+    fun observeAllChecks(): Flow<List<HomeworkCheck>>
+
+    @Query("SELECT COALESCE(MAX(attemptNo), 0) FROM homework_checks WHERE homeworkId = :homeworkId")
+    suspend fun lastAttempt(homeworkId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCheck(check: HomeworkCheck)
+}
+
+@Dao
+interface GrammarDao {
+    @Query("SELECT * FROM grammar_sets ORDER BY createdAt DESC")
+    fun observeSets(): Flow<List<GrammarSet>>
+
+    @Query("SELECT * FROM grammar_sets WHERE id = :id")
+    fun observeSet(id: String): Flow<GrammarSet?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSet(set: GrammarSet)
+
+    @Query("DELETE FROM grammar_sets WHERE id = :id")
+    suspend fun deleteSet(id: String)
+
+    @Query("SELECT * FROM grammar_progress WHERE setId = :setId")
+    fun observeProgress(setId: String): Flow<List<GrammarProgress>>
+
+    @Query("SELECT * FROM grammar_progress")
+    fun observeAllProgress(): Flow<List<GrammarProgress>>
+
+    @Query("SELECT * FROM grammar_progress WHERE setId = :setId AND ruleIndex = :ruleIndex")
+    suspend fun getProgress(setId: String, ruleIndex: Int): GrammarProgress?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertProgress(progress: GrammarProgress)
+}
+
+@Dao
+interface ReadingDao {
+    @Query("SELECT * FROM reading_texts ORDER BY createdAt DESC")
+    fun observeTexts(): Flow<List<ReadingText>>
+
+    @Query("SELECT * FROM reading_texts WHERE id = :id")
+    fun observeText(id: String): Flow<ReadingText?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertText(text: ReadingText)
+
+    @Query("DELETE FROM reading_texts WHERE id = :id")
+    suspend fun deleteText(id: String)
+
+    @Query("SELECT * FROM reading_runs ORDER BY ts ASC")
+    fun observeAllRuns(): Flow<List<ReadingRun>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRun(run: ReadingRun)
+
+    @Query("DELETE FROM reading_runs WHERE id = :id")
+    suspend fun deleteRun(id: String)
+}
+
+@Dao
+interface StoryListDao {
+    @Query("SELECT * FROM stories ORDER BY createdAt DESC")
+    fun observeAllStories(): Flow<List<Story>>
+
+    @Query("SELECT * FROM stories WHERE id = :id")
+    fun observeStoryById(id: String): Flow<Story?>
+}

@@ -13,7 +13,7 @@ class ClaudeJudge(private val api: ClaudeApi) {
             heard.forEach { append("- ").append(it).append('\n') }
             append("\nПринять ли ответ? Вызови инструмент judge.")
         }
-        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, JSONArray().put(ClaudeApi.textBlock(ask)), tool(), maxTokens = 500)
+        val input = api.callTool(apiKey, model, SYSTEM_PROMPT, JSONArray().put(ClaudeApi.textBlock(ask)), tool(), maxTokens = 4000, effort = "low", timeoutSec = 25)
         return input.optBoolean("correct", false)
     }
 

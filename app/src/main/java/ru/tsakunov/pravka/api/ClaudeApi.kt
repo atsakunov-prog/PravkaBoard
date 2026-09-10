@@ -29,7 +29,13 @@ class ClaudeApi {
         .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    /** Возвращает input вызванного инструмента. */
+    private class Retry(val withFallbacks: Boolean, val forceTool: Boolean)
+
+    /**
+     * Возвращает input вызванного инструмента.
+     * effort: null — по умолчанию модели, "low" — для быстрых коротких ответов (судья).
+     * timeoutSec: чтение ответа; для судьи короткий, чтобы контроша не висела.
+     */
     suspend fun callTool(
         apiKey: String,
         model: String,
@@ -37,32 +43,53 @@ class ClaudeApi {
         content: JSONArray,
         tool: JSONObject,
         maxTokens: Int = 16000,
+        effort: String? = null,
+        timeoutSec: Long = 180,
     ): JSONObject = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) throw ClaudeException("Сначала вставь API-ключ Anthropic в настройках")
         val toolName = tool.getString("name")
         val messages = JSONArray().put(JSONObject().put("role", "user").put("content", content))
-        val text = send(buildBody(model, system, messages, tool, maxTokens, withFallbacks = true), apiKey, withFallbacks = true)
-            ?: send(buildBody(model, system, messages, tool, maxTokens, withFallbacks = false), apiKey, withFallbacks = false)
-            ?: throw ClaudeException("Пустой ответ сервера")
-        parseToolInput(text, toolName)
+        // 1) fallbacks + принудительный инструмент; 2) без beta fallbacks, если она недоступна аккаунту;
+        // 3) tool_choice auto, если модель (Fable 5.1) не принимает принудительный вызов.
+        var withFallbacks = true
+        var forceTool = true
+        var text: String? = null
+        for (i in 0 until 4) {
+            val body = buildBody(model, system, messages, tool, maxTokens, effort, withFallbacks, forceTool)
+            when (val r = send(body, apiKey, withFallbacks, timeoutSec)) {
+                is SendResult.Ok -> { text = r.body; break }
+                SendResult.RetryWithoutFallbacks -> withFallbacks = false
+                SendResult.RetryWithAutoTool -> forceTool = false
+            }
+        }
+        parseToolInput(text ?: throw ClaudeException("Пустой ответ сервера"), toolName)
     }
 
-    private fun buildBody(model: String, system: String, messages: JSONArray, tool: JSONObject, maxTokens: Int, withFallbacks: Boolean): JSONObject {
+    private sealed interface SendResult {
+        class Ok(val body: String) : SendResult
+        data object RetryWithoutFallbacks : SendResult
+        data object RetryWithAutoTool : SendResult
+    }
+
+    private fun buildBody(
+        model: String, system: String, messages: JSONArray, tool: JSONObject, maxTokens: Int,
+        effort: String?, withFallbacks: Boolean, forceTool: Boolean,
+    ): JSONObject {
         val body = JSONObject()
             .put("model", model.ifBlank { DEFAULT_MODEL })
             .put("max_tokens", maxTokens)
-            .put("system", system)
+            .put("system", if (forceTool) system else "$system\n\nОтветь только вызовом инструмента ${tool.getString("name")}.")
             .put("tools", JSONArray().put(tool))
-            .put("tool_choice", JSONObject().put("type", "tool").put("name", tool.getString("name")))
+            .put("tool_choice", if (forceTool) JSONObject().put("type", "tool").put("name", tool.getString("name")) else JSONObject().put("type", "auto"))
             .put("messages", messages)
+        if (effort != null) body.put("output_config", JSONObject().put("effort", effort))
         // Серверный fallback: если классификатор Opus 5 отклонит запрос, API сам перезапустит его
         // на другой модели. Если аккаунту эта beta недоступна (400), повторяем без неё.
         if (withFallbacks) body.put("fallbacks", "default")
         return body
     }
 
-    /** Тело успешного ответа; null — если стоит повторить без fallbacks; иначе исключение. */
-    private fun send(body: JSONObject, apiKey: String, withFallbacks: Boolean): String? {
+    private fun send(body: JSONObject, apiKey: String, withFallbacks: Boolean, timeoutSec: Long): SendResult {
         val builder = Request.Builder()
             .url("https://api.anthropic.com/v1/messages")
             .header("x-api-key", apiKey.trim())
@@ -71,16 +98,18 @@ class ClaudeApi {
             .post(body.toString().toRequestBody("application/json".toMediaType()))
         if (withFallbacks) builder.header("anthropic-beta", "server-side-fallback-2026-07-01")
 
+        val client = if (timeoutSec == 180L) http else http.newBuilder().readTimeout(timeoutSec, TimeUnit.SECONDS).build()
         val response = try {
-            http.newCall(builder.build()).execute()
+            client.newCall(builder.build()).execute()
         } catch (e: IOException) {
             throw ClaudeException("Нет связи с сервером: ${e.message ?: "проверь интернет"}")
         }
         response.use { resp ->
             val text = resp.body?.string() ?: ""
-            if (resp.isSuccessful) return text
+            if (resp.isSuccessful) return SendResult.Ok(text)
             val lower = text.lowercase()
-            if (withFallbacks && resp.code == 400 && (lower.contains("fallback") || lower.contains("beta"))) return null
+            if (resp.code == 400 && withFallbacks && (lower.contains("fallback") || lower.contains("beta"))) return SendResult.RetryWithoutFallbacks
+            if (resp.code == 400 && lower.contains("tool_choice")) return SendResult.RetryWithAutoTool
             throw ClaudeException(describeError(resp.code, text))
         }
     }

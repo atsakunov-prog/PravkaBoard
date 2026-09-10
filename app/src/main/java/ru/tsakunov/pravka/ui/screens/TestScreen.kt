@@ -40,7 +40,8 @@ import ru.tsakunov.pravka.ui.wordsWord
 
 private sealed interface TestPhase {
     data object Ready : TestPhase
-    data class Listening(val idx: Int, val partial: String = "", val hint: String? = null) : TestPhase
+    /** attempt растёт при каждом перезапуске прослушивания, чтобы эффект точно перезапускался. */
+    data class Listening(val idx: Int, val attempt: Int = 0, val partial: String = "", val hint: String? = null) : TestPhase
     data class Checking(val idx: Int, val heard: List<String>) : TestPhase
     data class Correct(val idx: Int, val heard: String) : TestPhase
     data class Wrong(val idx: Int, val heard: String) : TestPhase
@@ -53,7 +54,7 @@ private sealed interface TestPhase {
 fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val all by vm.observeItems(listId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val all by remember(listId) { vm.observeItems(listId) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(all) { all.filter { it.en.isNotBlank() && it.ru.isNotBlank() } }
     val speech = remember { SpeechInput(context) }
     val speaker = rememberSpeaker()
@@ -70,7 +71,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
         if (granted) phase = TestPhase.Listening(0) else vm.showToast("Без микрофона контроша не работает")
     }
 
-    DisposableEffect(Unit) { onDispose { speech.stop() } }
+    DisposableEffect(Unit) { onDispose { speech.release() } }
 
     fun listen(idx: Int) {
         speech.start(
@@ -78,8 +79,9 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
             onPartial = { p -> (phase as? TestPhase.Listening)?.let { if (it.idx == idx) phase = it.copy(partial = p) } },
             onResult = { heard -> if ((phase as? TestPhase.Listening)?.idx == idx) phase = TestPhase.Checking(idx, heard) },
             onError = { code ->
-                if ((phase as? TestPhase.Listening)?.idx != idx) return@start
-                phase = if (SpeechInput.isRetryable(code)) TestPhase.Listening(idx, hint = SpeechInput.describeError(code))
+                val cur = phase as? TestPhase.Listening ?: return@start
+                if (cur.idx != idx) return@start
+                phase = if (SpeechInput.isRetryable(code)) TestPhase.Listening(idx, attempt = cur.attempt + 1, hint = SpeechInput.describeError(code))
                 else TestPhase.Error(idx, SpeechInput.describeError(code))
             },
         )
@@ -87,13 +89,14 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
 
     // Запуск прослушивания при входе в Listening (в том числе повтор после «не услышал»).
     val listening = phase as? TestPhase.Listening
-    LaunchedEffect(listening?.idx, listening?.hint) {
+    LaunchedEffect(listening?.idx, listening?.attempt) {
         if (listening == null) return@LaunchedEffect
-        if (listening.hint != null) delay(600)
+        if (listening.attempt > 0) delay(600)
         listen(listening.idx)
     }
 
     // Проверка ответа: сначала локально, для фраз — с запасным судьёй в модели.
+    // Эффект только выставляет Correct/Wrong: смена фазы меняет ключ и отменяет его.
     val checking = phase as? TestPhase.Checking
     LaunchedEffect(checking) {
         if (checking == null) return@LaunchedEffect
@@ -101,19 +104,24 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
         val heardText = checking.heard.firstOrNull() ?: ""
         var ok = Matching.matches(item.en, checking.heard)
         if (!ok && Matching.isPhrase(item.en)) ok = vm.judgeAnswer(item.ru, item.en, checking.heard)
-        if (ok) {
-            phase = TestPhase.Correct(checking.idx, heardText)
-            delay(900)
-            if (checking.idx + 1 < items.size) phase = TestPhase.Listening(checking.idx + 1)
-            else {
-                val duration = SystemClock.elapsedRealtime() - startedAt
-                phase = TestPhase.Done(duration)
-                confetti++
-                vm.saveQuizRun(listId, attempts, duration, items.size)
-            }
-        } else {
+        if (ok) phase = TestPhase.Correct(checking.idx, heardText)
+        else {
             phase = TestPhase.Wrong(checking.idx, heardText)
             speaker.speak(item.en)
+        }
+    }
+
+    // После «Верно!» пауза и переход к следующему слову или финиш.
+    val correct = phase as? TestPhase.Correct
+    LaunchedEffect(correct?.idx) {
+        if (correct == null) return@LaunchedEffect
+        delay(900)
+        if (correct.idx + 1 < items.size) phase = TestPhase.Listening(correct.idx + 1)
+        else {
+            val duration = SystemClock.elapsedRealtime() - startedAt
+            phase = TestPhase.Done(duration)
+            confetti++
+            vm.saveQuizRun(listId, attempts, duration, items.size)
         }
     }
 
@@ -184,7 +192,12 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                         SecondaryButton("К уроку", onClick = onBack, modifier = Modifier.fillMaxWidth())
                     }
                     else -> {
-                        val item = items[idx]
+                        val item = items.getOrNull(idx)
+                        if (item == null) {
+                            // Список изменился под ногами: начинаем заново.
+                            LaunchedEffect(Unit) { speech.stop(); phase = TestPhase.Ready }
+                            return@Column
+                        }
                         WordCard(item, phase)
                         Spacer(Modifier.height(20.dp))
                         when (p) {

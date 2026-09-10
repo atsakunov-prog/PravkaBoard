@@ -29,16 +29,18 @@ import ru.tsakunov.pravka.ui.wordsWord
 /** Училка: русское слово, по нажатию открывается английское; «знал» / «ещё повторю». */
 @Composable
 fun TeachScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onTest: () -> Unit) {
-    val all by vm.observeItems(listId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val all by remember(listId) { vm.observeItems(listId) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val items = remember(all) { all.filter { it.en.isNotBlank() && it.ru.isNotBlank() } }
     val speaker = rememberSpeaker()
 
     // Очередь идентификаторов: невыученные слова возвращаются в конец круга.
-    var queue by rememberSaveable(items.size) { mutableStateOf(items.map { it.id }) }
-    var revealed by rememberSaveable { mutableStateOf(false) }
-    var knownFirstTry by rememberSaveable { mutableIntStateOf(0) }
-    var repeats by rememberSaveable { mutableIntStateOf(0) }
-    var seen by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var queue by rememberSaveable(listId) { mutableStateOf(emptyList<String>()) }
+    var revealed by rememberSaveable(listId) { mutableStateOf(false) }
+    var knownFirstTry by rememberSaveable(listId) { mutableIntStateOf(0) }
+    var repeats by rememberSaveable(listId) { mutableIntStateOf(0) }
+    var seen by rememberSaveable(listId) { mutableStateOf(setOf<String>()) }
+    // Очередь заполняется, когда слова загрузились, и только если круг ещё не начинался.
+    LaunchedEffect(items) { if (queue.isEmpty() && seen.isEmpty() && items.isNotEmpty()) queue = items.map { it.id } }
 
     val current = queue.firstOrNull()?.let { id -> items.firstOrNull { it.id == id } }
     val total = items.size

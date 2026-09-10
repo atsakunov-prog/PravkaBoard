@@ -8,12 +8,15 @@ import android.net.Uri
 import android.util.Base64
 import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Подготовка фото для отправки в модель: уменьшение, поворот по EXIF, JPEG base64. */
 object Images {
     private const val MAX_SIDE = 2400
 
-    fun encodeJpegBase64(context: Context, uri: Uri): String {
+    /** Тяжёлая работа с растром идёт на IO, чтобы не замораживать интерфейс. */
+    suspend fun encodeJpegBase64(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         (resolver.openInputStream(uri) ?: throw ClaudeException("Не удалось открыть фото")).use {
@@ -57,6 +60,6 @@ object Images {
         val out = ByteArrayOutputStream()
         bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
         bmp.recycle()
-        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 }
