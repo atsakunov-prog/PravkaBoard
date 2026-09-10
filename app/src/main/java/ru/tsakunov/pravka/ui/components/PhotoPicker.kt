@@ -61,7 +61,13 @@ fun rememberPhotoPicker(maxItems: Int = 4, onError: (String) -> Unit): PhotoPick
                     onError("На телефоне нет приложения камеры, выбери фото из галереи")
                 }
             },
-            pickFromGallery = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            pickFromGallery = {
+                try {
+                    pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                } catch (_: ActivityNotFoundException) {
+                    onError("На телефоне нет приложения для выбора фото")
+                }
+            },
             clear = { pending = emptyList() },
         )
     }

@@ -31,7 +31,6 @@ import ru.tsakunov.pravka.data.ReadingRun
 import ru.tsakunov.pravka.domain.countWords
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.fmtDate
-import ru.tsakunov.pravka.ui.fmtNum
 import ru.tsakunov.pravka.ui.fmtTime
 import ru.tsakunov.pravka.ui.plural
 import ru.tsakunov.pravka.ui.theme.PravkaColors
@@ -119,7 +118,7 @@ fun ReadingListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -
                             )
                         }
                         if (best != null) Pill("${best.wordsPerMinute.roundToInt()} сл/мин", PravkaColors.EnSoft, PravkaColors.EnText)
-                        if (!t.isStory) IconButton(onClick = { deleteTarget = t }) { Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = PravkaColors.Muted) }
+                        IconButton(onClick = { deleteTarget = t }) { Icon(Icons.Filled.Delete, contentDescription = "Удалить", tint = PravkaColors.Muted) }
                     }
                 }
             }
@@ -128,7 +127,13 @@ fun ReadingListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -
     }
 
     deleteTarget?.let { t ->
-        ConfirmDialog(title = "Удалить текст?", text = "«${t.title}» будет удалён, результаты чтений останутся в истории.", onConfirm = { vm.deleteReadingText(t.id) }, onDismiss = { deleteTarget = null })
+        ConfirmDialog(
+            title = if (t.isStory) "Удалить рассказ?" else "Удалить текст?",
+            text = if (t.isStory) "«${t.title}» исчезнет и отсюда, и из урока. Если это был единственный рассказ урока, можно сочинить новый."
+            else "«${t.title}» будет удалён вместе с результатами чтений.",
+            onConfirm = { if (t.isStory) vm.deleteStory(t.id) else vm.deleteReadingText(t.id) },
+            onDismiss = { deleteTarget = null },
+        )
     }
     when (val s = state) {
         is ReadingState.Running -> WorkingDialog("Opus переписывает страницы", s.photos)
@@ -142,9 +147,14 @@ fun ReadingListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) -
     }
 }
 
+/** Короче этого чтение не бывает: такой СТОП считаем случайным и не сохраняем. */
+private const val MIN_READING_MS = 3_000L
+
 private sealed interface ReadPhase {
     data object Ready : ReadPhase
     data class Running(val startedAt: Long) : ReadPhase
+    /** СТОП нажат, результат пишется в базу: кнопки спрятаны, второе нажатие ничего не делает. */
+    data class Saving(val ms: Long) : ReadPhase
     data class Result(val run: ReadingRun, val prevBest: ReadingRun?, val isRecord: Boolean) : ReadPhase
 }
 
@@ -177,8 +187,15 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
     fun stop() {
         val r = phase as? ReadPhase.Running ?: return
         val t = readable ?: return
-        val ms = (SystemClock.elapsedRealtime() - r.startedAt).coerceAtLeast(1000)
+        val ms = SystemClock.elapsedRealtime() - r.startedAt
+        if (ms < MIN_READING_MS) {
+            // Случайный СТОП сразу после СТАРТа: не записываем, чтобы не испортить «лучшее».
+            phase = ReadPhase.Ready; elapsed = 0; stumbles = 0
+            vm.showToast("Слишком быстро, это не считается. Жми СТАРТ ещё раз")
+            return
+        }
         elapsed = ms
+        phase = ReadPhase.Saving(ms)
         scope.launch {
             val prevBest = own.maxByOrNull { it.wordsPerMinute }
             val run = vm.saveReadingRun(textId, ms, stumbles, t.words)
@@ -207,7 +224,8 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
             },
         ) { padding ->
             val t = readable
-            if (t == null) { Box(Modifier.fillMaxSize().padding(padding)) { EmptyHint("Текст не найден") }; return@Scaffold }
+            // Пока Room не ответил, экран пустой; «не найден» показываем только для удалённого текста.
+            if (t == null) { Box(Modifier.fillMaxSize().padding(padding)); return@Scaffold }
             Column(Modifier.fillMaxSize().padding(padding)) {
                 // Текст занимает всё, что остаётся над панелью управления.
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -256,6 +274,14 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
                                     BigButton("СТОП", onClick = { stop() }, container = PravkaColors.Danger, modifier = Modifier.weight(1f))
                                 }
                             }
+                            is ReadPhase.Saving -> {
+                                Text(
+                                    fmtTime(p.ms),
+                                    style = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, fontFeatureSettings = "tnum", color = PravkaColors.Ink),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = PravkaColors.Good)
+                            }
                             is ReadPhase.Result -> {
                                 Text(
                                     "${p.run.wordsPerMinute.roundToInt()} слов в минуту",
@@ -263,7 +289,7 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
                                 )
                                 Text(
                                     "${fmtTime(p.run.durationMs)} · ${plural(p.run.stumbles, "запинка", "запинки", "запинок")}" +
-                                        (p.prevBest?.let { pb ->
+                                        (p.prevBest?.takeIf { it.wordsPerMinute > 0 }?.let { pb ->
                                             val pct = ((p.run.wordsPerMinute / pb.wordsPerMinute - 1) * 100).roundToInt()
                                             if (pct > 0) " · быстрее лучшего на $pct%" else if (pct < 0) " · лучшее было ${pb.wordsPerMinute.roundToInt()}" else ""
                                         } ?: ""),
@@ -292,6 +318,3 @@ fun ReadingScreen(vm: AppViewModel, textId: String, onBack: () -> Unit) {
         ConfettiOverlay(trigger = confetti, modifier = Modifier.fillMaxSize())
     }
 }
-
-@Suppress("unused")
-private fun fmtWpm(x: Double) = fmtNum(x, 0)

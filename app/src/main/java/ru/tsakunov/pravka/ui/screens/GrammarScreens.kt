@@ -18,7 +18,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -26,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import ru.tsakunov.pravka.data.GrammarProgress
 import ru.tsakunov.pravka.data.GrammarSet
 import ru.tsakunov.pravka.domain.Drill
 import ru.tsakunov.pravka.domain.GrammarSetContent
@@ -150,6 +148,7 @@ fun GrammarSetScreen(vm: AppViewModel, setId: String, onBack: () -> Unit, onDril
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             val rules = content?.rules ?: emptyList()
+            if (set == null) return@LazyColumn // ещё грузится
             if (rules.isEmpty()) { item { EmptyHint("В теме нет уровней") }; return@LazyColumn }
             itemsIndexed(rules) { index, rule ->
                 val p = progress.firstOrNull { it.ruleIndex == index }
@@ -213,6 +212,8 @@ fun GrammarDrillScreen(vm: AppViewModel, setId: String, ruleIndex: Int, onBack: 
     }
 
     fun answer(correct: Boolean) {
+        if (!revealed) return // второе нажатие, пока пишется ответ
+        revealed = false
         val wasPassed = p?.passed == true
         scope.launch {
             val np = vm.recordGrammarAnswer(setId, ruleIndex, correct, streak)
@@ -234,7 +235,7 @@ fun GrammarDrillScreen(vm: AppViewModel, setId: String, ruleIndex: Int, onBack: 
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                if (rule == null) { EmptyHint("Уровень не найден"); return@Column }
+                if (rule == null) { if (set != null) EmptyHint("Уровень не найден"); return@Column }
                 Text(rule.explanation, style = MaterialTheme.typography.bodyMedium, color = PravkaColors.Ink2, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
                 Spacer(Modifier.height(12.dp))
                 StreakDots(streak, GrammarSetContent.STREAK_TO_PASS, passed = p?.passed == true)
@@ -315,8 +316,3 @@ private fun DrillCard(drill: Drill, revealed: Boolean, onSpeak: () -> Unit) {
         }
     }
 }
-
-@Suppress("unused")
-private val unusedColor = Color.Transparent
-@Suppress("unused")
-private fun unusedProgress(p: GrammarProgress) = p.passed

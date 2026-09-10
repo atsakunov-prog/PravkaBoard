@@ -102,6 +102,9 @@ interface StoryDao {
 
     @Query("DELETE FROM stories WHERE listId = :listId")
     suspend fun deleteForList(listId: String)
+
+    @Query("DELETE FROM stories WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -195,6 +198,9 @@ interface ReadingDao {
 
     @Query("DELETE FROM reading_runs WHERE id = :id")
     suspend fun deleteRun(id: String)
+
+    @Query("DELETE FROM reading_runs WHERE textId = :textId")
+    suspend fun deleteRunsForText(textId: String)
 }
 
 @Dao

@@ -191,5 +191,5 @@ data class ReadingRun(
     val stumbles: Int,
     val words: Int,
 ) {
-    val wordsPerMinute: Double get() = words / (durationMs / 60_000.0)
+    val wordsPerMinute: Double get() = if (words <= 0 || durationMs <= 0) 0.0 else words / (durationMs / 60_000.0)
 }

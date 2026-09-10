@@ -153,7 +153,7 @@ class Repository(
     suspend fun deleteGrammarSet(id: String) = grammar.deleteSet(id)
 
     /** Записывает ответ по карточке уровня; возвращает обновлённый прогресс (passed выставляется при серии из STREAK_TO_PASS). */
-    suspend fun recordGrammarAnswer(setId: String, ruleIndex: Int, correct: Boolean, currentStreak: Int): GrammarProgress {
+    suspend fun recordGrammarAnswer(setId: String, ruleIndex: Int, correct: Boolean, currentStreak: Int): GrammarProgress = db.withTransaction {
         val prev = grammar.getProgress(setId, ruleIndex)
         val streak = if (correct) currentStreak + 1 else 0
         val p = GrammarProgress(
@@ -165,7 +165,7 @@ class Repository(
             updatedAt = System.currentTimeMillis(),
         )
         grammar.upsertProgress(p)
-        return p
+        p
     }
 
     // ---- Чтение ----
@@ -173,6 +173,7 @@ class Repository(
     fun observeReadingText(id: String): Flow<ReadingText?> = reading.observeText(id)
     fun observeReadingRuns(): Flow<List<ReadingRun>> = reading.observeAllRuns()
     fun observeAllStories(): Flow<List<Story>> = storyList.observeAllStories()
+    suspend fun deleteStory(id: String) = db.withTransaction { reading.deleteRunsForText(id); stories.deleteById(id) }
     fun observeStoryById(id: String): Flow<Story?> = storyList.observeStoryById(id)
 
     suspend fun saveReadingText(title: String, textEn: String, textRu: String): ReadingText {
@@ -181,7 +182,8 @@ class Repository(
         return t
     }
 
-    suspend fun deleteReadingText(id: String) = reading.deleteText(id)
+    /** Текст удаляется вместе со своими чтениями: без текста им негде показываться. */
+    suspend fun deleteReadingText(id: String) = db.withTransaction { reading.deleteRunsForText(id); reading.deleteText(id) }
 
     suspend fun addReadingRun(textId: String, durationMs: Long, stumbles: Int, words: Int): ReadingRun {
         val run = ReadingRun(id = newId(), textId = textId, ts = System.currentTimeMillis(), durationMs = durationMs, stumbles = stumbles, words = words)

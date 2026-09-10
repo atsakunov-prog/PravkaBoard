@@ -29,8 +29,6 @@ class ClaudeApi {
         .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    private class Retry(val withFallbacks: Boolean, val forceTool: Boolean)
-
     /**
      * Возвращает input вызванного инструмента.
      * effort: null — по умолчанию модели, "low" — для быстрых коротких ответов (судья).
@@ -56,7 +54,7 @@ class ClaudeApi {
         var text: String? = null
         for (i in 0 until 4) {
             val body = buildBody(model, system, messages, tool, maxTokens, effort, withFallbacks, forceTool)
-            when (val r = send(body, apiKey, withFallbacks, timeoutSec)) {
+            when (val r = send(body, apiKey, withFallbacks, forceTool, timeoutSec)) {
                 is SendResult.Ok -> { text = r.body; break }
                 SendResult.RetryWithoutFallbacks -> withFallbacks = false
                 SendResult.RetryWithAutoTool -> forceTool = false
@@ -89,7 +87,7 @@ class ClaudeApi {
         return body
     }
 
-    private fun send(body: JSONObject, apiKey: String, withFallbacks: Boolean, timeoutSec: Long): SendResult {
+    private fun send(body: JSONObject, apiKey: String, withFallbacks: Boolean, forceTool: Boolean, timeoutSec: Long): SendResult {
         val builder = Request.Builder()
             .url("https://api.anthropic.com/v1/messages")
             .header("x-api-key", apiKey.trim())
@@ -109,7 +107,8 @@ class ClaudeApi {
             if (resp.isSuccessful) return SendResult.Ok(text)
             val lower = text.lowercase()
             if (resp.code == 400 && withFallbacks && (lower.contains("fallback") || lower.contains("beta"))) return SendResult.RetryWithoutFallbacks
-            if (resp.code == 400 && lower.contains("tool_choice")) return SendResult.RetryWithAutoTool
+            // Повторяем с tool_choice auto только один раз: если и он отклонён, показываем ответ сервера.
+            if (resp.code == 400 && forceTool && lower.contains("tool_choice")) return SendResult.RetryWithAutoTool
             throw ClaudeException(describeError(resp.code, text))
         }
     }

@@ -168,10 +168,11 @@ fun HomeworkScreen(vm: AppViewModel, homeworkId: String, onBack: () -> Unit) {
             vm.homeworkHandled()
         }
     }
-    // Конфетти один раз на каждую проверку без ошибок.
+    // Конфетти один раз на каждую свежую проверку без ошибок (не при открытии старой работы из списка).
     LaunchedEffect(last?.id) {
         val l = last ?: return@LaunchedEffect
-        if (l.total > 0 && l.correct == l.total && celebratedFor != l.id) {
+        val fresh = System.currentTimeMillis() - l.ts < 2 * 60_000L
+        if (fresh && l.total > 0 && l.correct == l.total && celebratedFor != l.id) {
             celebratedFor = l.id
             confetti++
         }
@@ -193,8 +194,9 @@ fun HomeworkScreen(vm: AppViewModel, homeworkId: String, onBack: () -> Unit) {
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (last == null || result == null) {
-                    item { EmptyHint("Проверок пока нет") }
+                if (last == null) return@LazyColumn // ещё грузится (у домашки всегда есть хотя бы одна проверка)
+                if (result == null) {
+                    item { EmptyHint("Не удалось прочитать результат проверки") }
                     return@LazyColumn
                 }
                 item { ScoreHeader(last, checks) }

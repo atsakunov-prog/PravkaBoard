@@ -148,6 +148,7 @@ class AppViewModel(
     }
     fun readingHandled() { _reading.value = ReadingState.Idle }
     fun deleteReadingText(id: String) = viewModelScope.launch { repo.deleteReadingText(id) }
+    fun deleteStory(id: String) = viewModelScope.launch { repo.deleteStory(id) }
     suspend fun saveReadingRun(textId: String, durationMs: Long, stumbles: Int, words: Int): ReadingRun = repo.addReadingRun(textId, durationMs, stumbles, words)
     fun deleteReadingRun(id: String) = viewModelScope.launch { repo.deleteReadingRun(id) }
 
