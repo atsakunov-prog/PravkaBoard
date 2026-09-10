@@ -20,7 +20,7 @@ import androidx.core.content.FileProvider
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import java.io.File
 
-/** Набор фото для отправки в модель: камера или галерея, до четырёх снимков. */
+/** Набор фото для отправки в модель: камера или галерея; предел снимков задаёт экран (maxItems). */
 class PhotoPicker internal constructor(
     val pending: List<Uri>,
     val openCamera: () -> Unit,
@@ -29,7 +29,7 @@ class PhotoPicker internal constructor(
 )
 
 @Composable
-fun rememberPhotoPicker(maxItems: Int = 4, onError: (String) -> Unit): PhotoPicker {
+fun rememberPhotoPicker(maxItems: Int = 8, onError: (String) -> Unit): PhotoPicker {
     val context = LocalContext.current
     // Переживают уничтожение процесса, пока открыта камера (Uri — Parcelable).
     var pending by rememberSaveable(stateSaver = listSaver<List<Uri>, String>(save = { it.map(Uri::toString) }, restore = { it.map(Uri::parse) })) {

@@ -54,20 +54,27 @@ class SpeechInput(private val context: Context) {
 
     val available: Boolean get() = SpeechRecognizer.isRecognitionAvailable(context)
 
+    /**
+     * silenceMs — сколько тишины считать концом реплики (подсказка движку; для чтения текста ребёнком
+     * ставим больше, чем для одного слова). onBegin/onEnd — моменты начала и конца речи по данным движка.
+     */
     fun start(
         language: String,
         onPartial: (String) -> Unit,
         onResult: (List<String>) -> Unit,
         onError: (Int) -> Unit,
+        silenceMs: Long? = null,
+        onBegin: () -> Unit = {},
+        onEnd: () -> Unit = {},
     ) {
         val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { recognizer = it }
         runCatching { r.cancel() }
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() = onBegin()
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
+            override fun onEndOfSpeech() = onEnd()
             override fun onEvent(eventType: Int, params: Bundle?) {}
             override fun onError(error: Int) = onError(error)
             override fun onResults(results: Bundle?) {
@@ -85,6 +92,10 @@ class SpeechInput(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            if (silenceMs != null) {
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            }
         }
         r.startListening(intent)
     }

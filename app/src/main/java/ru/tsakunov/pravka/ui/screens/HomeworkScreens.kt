@@ -39,7 +39,7 @@ fun HomeworkListScreen(vm: AppViewModel, onOpen: (String) -> Unit, onTab: (Tab) 
     val homeworks by vm.homeworks.collectAsStateWithLifecycle()
     val checks by vm.homeworkChecks.collectAsStateWithLifecycle()
     val state by vm.homeworkState.collectAsStateWithLifecycle()
-    val picker = rememberPhotoPicker(onError = { vm.showToast(it) })
+    val picker = rememberPhotoPicker(maxItems = 12, onError = { vm.showToast(it) })
     var deleteTarget by remember { mutableStateOf<Homework?>(null) }
 
     LaunchedEffect(state) {

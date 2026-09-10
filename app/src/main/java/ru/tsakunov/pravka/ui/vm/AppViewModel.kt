@@ -8,12 +8,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.api.ClaudeApi
 import ru.tsakunov.pravka.api.ClaudeException
 import ru.tsakunov.pravka.api.ClaudeGrammar
 import ru.tsakunov.pravka.api.ClaudeReading
+import ru.tsakunov.pravka.api.ClaudeReadingJudge
+import ru.tsakunov.pravka.api.SentenceDraft
 import ru.tsakunov.pravka.api.ClaudeHomework
 import ru.tsakunov.pravka.api.ClaudeJudge
 import ru.tsakunov.pravka.api.ClaudeStory
@@ -32,7 +36,11 @@ import ru.tsakunov.pravka.data.WordList
 import ru.tsakunov.pravka.data.GrammarProgress
 import ru.tsakunov.pravka.data.ReadingRun
 import ru.tsakunov.pravka.domain.HomeworkResult
+import ru.tsakunov.pravka.domain.LocalReading
+import ru.tsakunov.pravka.domain.ReadingDetail
+import ru.tsakunov.pravka.domain.SentenceResult
 import ru.tsakunov.pravka.domain.countLetters
+import ru.tsakunov.pravka.domain.countWords
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -88,6 +96,7 @@ class AppViewModel(
     private val homeworkChecker: ClaudeHomework,
     private val grammarBuilder: ClaudeGrammar,
     private val readingExtractor: ClaudeReading,
+    private val readingJudge: ClaudeReadingJudge,
 ) : ViewModel() {
 
     // ---- Грамматика ----
@@ -151,6 +160,43 @@ class AppViewModel(
     fun deleteStory(id: String) = viewModelScope.launch { repo.deleteStory(id) }
     suspend fun saveReadingRun(textId: String, durationMs: Long, stumbles: Int, words: Int): ReadingRun = repo.addReadingRun(textId, durationMs, stumbles, words)
     fun deleteReadingRun(id: String) = viewModelScope.launch { repo.deleteReadingRun(id) }
+
+    /**
+     * Разбор чтения с микрофоном. Если модель недоступна (нет ключа, сети), чтение оцениваем локально по
+     * совпадению слов, перевод остаётся неизвестным; ошибка возвращается вторым значением для подсказки.
+     */
+    suspend fun judgeReading(textRu: String, drafts: List<SentenceDraft>): Pair<ReadingDetail, String?> {
+        val s = settings.state.value
+        val local = ReadingDetail(
+            sentences = drafts.map { d ->
+                SentenceResult(
+                    text = d.text, heardEn = d.heardEn, heardRu = d.heardRu,
+                    reading = if (d.enSkipped) SentenceResult.SKIPPED else LocalReading.readingVerdict(d.text, d.heardEn),
+                    translation = if (d.ruSkipped) SentenceResult.SKIPPED else SentenceResult.UNKNOWN,
+                    comment = "", readMs = d.readMs,
+                )
+            },
+            praise = "", judged = false,
+        )
+        if (s.apiKey.isBlank()) return local to "Без API-ключа перевод не проверяется, только чтение"
+        return try {
+            readingJudge.judge(textRu, drafts, s.apiKey, s.model) to null
+        } catch (e: ClaudeException) {
+            local to (e.message ?: "Модель недоступна")
+        } catch (e: Exception) {
+            local to "Не удалось проверить перевод: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
+    /** Вердикт модели и запись чтения: в области ViewModel, чтобы уход с экрана не потерял результат. */
+    fun finishMicReading(textId: String, textRu: String, drafts: List<SentenceDraft>, totalMs: Long): Deferred<Triple<ReadingRun, ReadingDetail, String?>> =
+        viewModelScope.async {
+            val (detail, warning) = judgeReading(textRu, drafts)
+            val readingMs = drafts.sumOf { it.readMs }.takeIf { it > 0 } ?: totalMs
+            val words = drafts.filter { !it.enSkipped }.sumOf { countWords(it.text) }.coerceAtLeast(1)
+            val run = repo.addMicReadingRun(textId, totalMs, readingMs, words, detail)
+            Triple(run, detail, warning)
+        }
 
     // ---- Домашка ----
     val homeworks = repo.observeHomeworks().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -364,7 +410,7 @@ class AppViewModel(
                 AppViewModel(
                     app.repository, app.settings, ClaudeVocabParser(app, api), Updater(app),
                     ClaudeStory(api), ClaudeJudge(api), ClaudeHomework(app, api),
-                    ClaudeGrammar(app, api), ClaudeReading(app, api),
+                    ClaudeGrammar(app, api), ClaudeReading(app, api), ClaudeReadingJudge(api),
                 ) as T
             }
     }

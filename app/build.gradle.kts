@@ -99,4 +99,6 @@ dependencies {
     implementation(libs.okhttp)
 
     testImplementation(libs.junit)
+    // org.json в юнит-тестах: на Android он в платформе, а в JVM-тестах нужен настоящий.
+    testImplementation(libs.org.json)
 }

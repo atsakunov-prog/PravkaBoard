@@ -6,6 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import ru.tsakunov.pravka.domain.GrammarSetContent
 import ru.tsakunov.pravka.domain.HomeworkResult
+import ru.tsakunov.pravka.domain.ReadingDetail
 import ru.tsakunov.pravka.domain.countWords
 import java.util.UUID
 
@@ -187,6 +188,17 @@ class Repository(
 
     suspend fun addReadingRun(textId: String, durationMs: Long, stumbles: Int, words: Int): ReadingRun {
         val run = ReadingRun(id = newId(), textId = textId, ts = System.currentTimeMillis(), durationMs = durationMs, stumbles = stumbles, words = words)
+        reading.insertRun(run)
+        return run
+    }
+
+    /** Чтение с микрофоном: общее время сеанса, чистое время чтения и разбор по предложениям. */
+    suspend fun addMicReadingRun(textId: String, durationMs: Long, readingMs: Long, words: Int, detail: ReadingDetail): ReadingRun {
+        val run = ReadingRun(
+            id = newId(), textId = textId, ts = System.currentTimeMillis(), durationMs = durationMs, stumbles = 0, words = words,
+            mode = ReadingRun.MODE_MIC, readingMs = readingMs, sentences = detail.total, readOk = detail.readOk,
+            transOk = if (detail.translationKnown) detail.transOk else null, detailJson = detail.toJson(),
+        )
         reading.insertRun(run)
         return run
     }

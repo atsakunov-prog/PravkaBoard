@@ -1,5 +1,6 @@
 package ru.tsakunov.pravka.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -181,7 +182,12 @@ data class ReadingText(
     val createdAt: Long,
 )
 
-/** Одно чтение текста: время и число запинок. textId — из reading_texts или stories. */
+/**
+ * Одно чтение текста. textId — из reading_texts или stories.
+ * Секундомер (mode = timer): durationMs — время чтения, stumbles — запинки, отмеченные папой.
+ * Микрофон (mode = mic): durationMs — весь сеанс с переводом, readingMs — только чтение по-английски,
+ * readOk/transOk — сколько предложений прочитано чисто и переведено верно, detailJson — по предложениям.
+ */
 @Entity(tableName = "reading_runs", indices = [Index("textId"), Index("ts")])
 data class ReadingRun(
     @PrimaryKey val id: String,
@@ -190,6 +196,20 @@ data class ReadingRun(
     val durationMs: Long,
     val stumbles: Int,
     val words: Int,
+    @ColumnInfo(defaultValue = "timer") val mode: String = MODE_TIMER,
+    val readingMs: Long? = null,
+    val sentences: Int? = null,
+    val readOk: Int? = null,
+    val transOk: Int? = null,
+    val detailJson: String? = null,
 ) {
-    val wordsPerMinute: Double get() = if (words <= 0 || durationMs <= 0) 0.0 else words / (durationMs / 60_000.0)
+    /** Время именно чтения: для микрофона без пауз на перевод. */
+    val readMs: Long get() = readingMs ?: durationMs
+    val wordsPerMinute: Double get() = if (words <= 0 || readMs <= 0) 0.0 else words / (readMs / 60_000.0)
+    val isMic: Boolean get() = mode == MODE_MIC
+
+    companion object {
+        const val MODE_TIMER = "timer"
+        const val MODE_MIC = "mic"
+    }
 }
