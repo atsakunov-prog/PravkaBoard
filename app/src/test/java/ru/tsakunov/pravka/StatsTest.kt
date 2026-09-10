@@ -1,0 +1,134 @@
+package ru.tsakunov.pravka
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import ru.tsakunov.pravka.data.Attempt
+import ru.tsakunov.pravka.data.Lang
+import ru.tsakunov.pravka.data.Seed
+import ru.tsakunov.pravka.domain.VerdictKind
+import ru.tsakunov.pravka.domain.countLetters
+import ru.tsakunov.pravka.domain.evaluate
+import ru.tsakunov.pravka.domain.statsFor
+import ru.tsakunov.pravka.ui.fmtNum
+import ru.tsakunov.pravka.ui.fmtTime
+import ru.tsakunov.pravka.ui.lettersWord
+import ru.tsakunov.pravka.ui.parseTimeInput
+
+class StatsTest {
+
+    private fun attempt(id: String, lang: Lang, word: String?, letters: Int, sec: Double, ts: Long) = Attempt(
+        id = id, ts = ts, lang = lang.code, word = word, letters = letters, ms = (sec * 1000).toLong(), source = "app",
+    )
+
+    @Test
+    fun countLetters_ignoresSpacesAndPunctuation() {
+        assertEquals(3, countLetters("hen"))
+        assertEquals(5, countLetters("geese"))
+        assertEquals(6, countLetters("курица"))
+        assertEquals(21, countLetters("Here is the little red hen."))
+        assertEquals(6, countLetters("Пойдём!"))
+        assertEquals(0, countLetters("123 - !"))
+    }
+
+    @Test
+    fun seed_matchesPaperNotes() {
+        val seed = Seed.attempts()
+        val en = statsFor(Lang.EN, seed)
+        val ru = statsFor(Lang.RU, seed)
+        assertEquals(11, en.n)
+        assertEquals(2, ru.n)
+        // EN: 52 буквы за 405 секунд, RU: 12 букв за 101 секунду
+        assertEquals(52, en.totalLetters)
+        assertEquals(405_000L, en.totalMs)
+        assertEquals(405.0 / 52, en.avg!!, 1e-9)
+        assertEquals(101.0 / 12, ru.avg!!, 1e-9)
+        // Лучший EN на бумаге: 4 буквы за 22 секунды = 5,5 с/букву
+        assertEquals(5.5, en.best!!.secPerLetter, 1e-9)
+    }
+
+    @Test
+    fun evaluate_recordAndFasterAndNeutral() {
+        val base = Seed.attempts()
+        val now = System.currentTimeMillis()
+
+        val record = attempt("r", Lang.EN, "hen", 3, 12.0, now) // 4,0 с/б < 5,5
+        val v1 = evaluate(record, base + record)
+        assertEquals(VerdictKind.RECORD, v1.kind)
+        assertEquals(5.5, v1.prevBest!!, 1e-9)
+
+        val faster = attempt("f", Lang.EN, "goose", 5, 35.0, now + 1) // 7,0 < средняя 7,79, но > рекорда
+        val v2 = evaluate(faster, base + faster)
+        assertEquals(VerdictKind.FASTER, v2.kind)
+
+        val slow = attempt("s", Lang.EN, "wheat", 5, 60.0, now + 2) // 12 с/б
+        val v3 = evaluate(slow, base + slow)
+        assertEquals(VerdictKind.NEUTRAL, v3.kind)
+        assertEquals(0, v3.streak)
+
+        // Двухбуквенное слово не может стать рекордом
+        val tiny = attempt("t", Lang.EN, "do", 2, 4.0, now + 3) // 2 с/б
+        val v4 = evaluate(tiny, base + tiny)
+        assertEquals(VerdictKind.FASTER, v4.kind)
+    }
+
+    @Test
+    fun evaluate_firstAttemptOfLanguage() {
+        val a = attempt("x", Lang.RU, "гусь", 4, 30.0, 1L)
+        val v = evaluate(a, listOf(a))
+        assertEquals(VerdictKind.FIRST, v.kind)
+        assertNull(v.prevBest)
+        assertNull(v.avg)
+    }
+
+    @Test
+    fun evaluate_milestoneCrossing() {
+        val base = Seed.attempts() // 64 буквы
+        val big = attempt("m", Lang.EN, "Here is the little red hen. Who can help me?", 36, 300.0, 5L)
+        val v = evaluate(big, base + big)
+        assertEquals(100, v.milestone)
+        assertTrue(v.celebrate)
+    }
+
+    @Test
+    fun streak_countsConsecutiveFasterThanAverage() {
+        val now = 1_000_000L
+        val list = listOf(
+            attempt("1", Lang.RU, "a", 5, 50.0, now),      // 10
+            attempt("2", Lang.RU, "b", 5, 50.0, now + 1),  // 10
+            attempt("3", Lang.RU, "c", 5, 25.0, now + 2),  // 5
+            attempt("4", Lang.RU, "d", 5, 25.0, now + 3),  // 5
+            attempt("5", Lang.RU, "e", 5, 20.0, now + 4),  // 4
+        )
+        val v = evaluate(list.last(), list)
+        // средняя 170/25 = 6,8; последние три (5, 5, 4) быстрее
+        assertEquals(3, v.streak)
+        assertNotNull(v.avg)
+    }
+
+    @Test
+    fun formatting() {
+        assertEquals("0:45", fmtTime(45_000))
+        assertEquals("1:01", fmtTime(61_000))
+        assertEquals("0:21,4", fmtTime(21_400, tenths = true))
+        assertEquals("0:00,0", fmtTime(0, tenths = true))
+        assertEquals("7,5", fmtNum(7.5))
+        assertEquals("1 буква", lettersWord(1))
+        assertEquals("3 буквы", lettersWord(3))
+        assertEquals("11 букв", lettersWord(11))
+        assertEquals("21 буква", lettersWord(21))
+    }
+
+    @Test
+    fun parseTime() {
+        assertEquals(45_000L, parseTimeInput("0:45"))
+        assertEquals(61_000L, parseTimeInput("1:01"))
+        assertEquals(45_000L, parseTimeInput("45"))
+        assertEquals(45_500L, parseTimeInput("45,5"))
+        assertNull(parseTimeInput(""))
+        assertNull(parseTimeInput("abc"))
+        assertNull(parseTimeInput("0:00"))
+    }
+}
