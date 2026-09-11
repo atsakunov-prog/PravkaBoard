@@ -64,6 +64,10 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
     val items = remember(all) { all.filter { it.en.isNotBlank() && it.ru.isNotBlank() } }
     val speech = remember { vm.speechInput(context) }
     val speaker = rememberSpeaker()
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
+    // С микрофоном — ответ распознаёт Google; без — Боря говорит вслух, а папа жмёт «верно» или «не верно».
+    val withMic = settings.quizMic
+    var revealedFor by remember { mutableIntStateOf(-1) }
 
     var phase by remember { mutableStateOf<TestPhase>(TestPhase.Ready) }
     var attempts by remember { mutableIntStateOf(1) }
@@ -133,9 +137,11 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
     }
 
     fun begin() {
-        if (!speech.available) { vm.showToast("На телефоне нет службы распознавания речи Google"); return }
         attempts = 1
         startedAt = SystemClock.elapsedRealtime()
+        revealedFor = -1
+        if (!withMic) { phase = TestPhase.Prompt(0); return }
+        if (!speech.available) { vm.showToast("На телефоне нет службы распознавания речи Google"); return }
         route = speech.route()
         if (micGranted) phase = TestPhase.Prompt(0) else permission.launch(Manifest.permission.RECORD_AUDIO)
     }
@@ -143,7 +149,16 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
     fun restart() {
         attempts++
         speech.stop()
+        revealedFor = -1
         phase = TestPhase.Prompt(0)
+    }
+
+    /** Без микрофона: вердикт папы. */
+    fun verdict(idx: Int, ok: Boolean) {
+        val item = items.getOrNull(idx) ?: return
+        revealedFor = -1
+        if (ok) phase = TestPhase.Correct(idx, "")
+        else { phase = TestPhase.Wrong(idx, ""); speaker.speak(item.en) }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -173,9 +188,21 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                 when (val p = phase) {
                     TestPhase.Ready -> {
                         Text("Контроша по ${wordsWord(items.size)}", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                            SegmentedButton(
+                                selected = withMic, onClick = { vm.setQuizMic(true) }, shape = SegmentedButtonDefaults.itemShape(0, 2),
+                                colors = SegmentedButtonDefaults.colors(activeContainerColor = PravkaColors.Ink, activeContentColor = Color.White, inactiveContainerColor = PravkaColors.Surface),
+                            ) { Text("С микрофоном") }
+                            SegmentedButton(
+                                selected = !withMic, onClick = { vm.setQuizMic(false) }, shape = SegmentedButtonDefaults.itemShape(1, 2),
+                                colors = SegmentedButtonDefaults.colors(activeContainerColor = PravkaColors.Ink, activeContentColor = Color.White, inactiveContainerColor = PravkaColors.Surface),
+                            ) { Text("Без микрофона") }
+                        }
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            "На экране русское слово. Нажми на микрофон, скажи его по-английски, нажми ещё раз. Одна ошибка — и начинаем с первого слова.",
+                            if (withMic) "На экране русское слово. Нажми на микрофон, скажи его по-английски, нажми ещё раз. Одна ошибка — и начинаем с первого слова."
+                            else "На экране русское слово. Боря говорит его по-английски вслух, папа жмёт «верно» или «не верно». Одна ошибка — и начинаем с первого слова.",
                             color = PravkaColors.Ink2, textAlign = TextAlign.Center,
                         )
                         Spacer(Modifier.height(24.dp))
@@ -203,13 +230,26 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                         WordCard(item, phase)
                         Spacer(Modifier.height(20.dp))
                         when (p) {
-                            is TestPhase.Prompt -> {
+                            is TestPhase.Prompt -> if (withMic) {
                                 MicButton(listening = false, onClick = { listen(p.idx) })
                                 Spacer(Modifier.height(8.dp))
                                 Text(
                                     p.hint ?: "Нажми и скажи по-английски",
                                     color = if (p.hint != null) PravkaColors.RuText else PravkaColors.Ink2, textAlign = TextAlign.Center,
                                 )
+                            } else {
+                                Text("Боря говорит по-английски, папа отмечает", color = PravkaColors.Ink2, textAlign = TextAlign.Center)
+                                Spacer(Modifier.height(6.dp))
+                                if (revealedFor == p.idx) {
+                                    Text(item.en, style = MaterialTheme.typography.titleLarge, color = PravkaColors.EnText, textAlign = TextAlign.Center)
+                                } else {
+                                    TextButton(onClick = { revealedFor = p.idx; speaker.speak(item.en) }) { Text("Показать ответ", color = PravkaColors.Muted) }
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    CalmButton("Не верно", bg = Color(0xFFF3DCDC), fg = Color(0xFF8B3A3A), onClick = { verdict(p.idx, false) }, modifier = Modifier.weight(1f))
+                                    CalmButton("Верно", bg = PravkaColors.GoodSoft, fg = PravkaColors.GoodText, onClick = { verdict(p.idx, true) }, modifier = Modifier.weight(1f))
+                                }
                             }
                             is TestPhase.Listening -> {
                                 MicButton(listening = true, onClick = { speech.finish() })
@@ -226,7 +266,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                             }
                             is TestPhase.Correct -> Text("Верно!", style = MaterialTheme.typography.headlineSmall, color = PravkaColors.GoodText)
                             is TestPhase.Wrong -> {
-                                Text("Ты сказал: «${p.heard}»", color = PravkaColors.Ink2, textAlign = TextAlign.Center)
+                                if (p.heard.isNotBlank()) Text("Ты сказал: «${p.heard}»", color = PravkaColors.Ink2, textAlign = TextAlign.Center)
                                 Spacer(Modifier.height(4.dp))
                                 Text("Правильно: ${item.en}", style = MaterialTheme.typography.titleMedium, color = PravkaColors.Danger, textAlign = TextAlign.Center)
                                 Spacer(Modifier.height(16.dp))
@@ -246,7 +286,7 @@ fun TestScreen(vm: AppViewModel, listId: String, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.weight(1f))
                 if (phase !is TestPhase.Ready && phase !is TestPhase.Done) {
-                    route?.let { r ->
+                    if (withMic) route?.let { r ->
                         Text(
                             r.label,
                             style = MaterialTheme.typography.labelSmall,
@@ -292,6 +332,20 @@ private fun WordCard(item: WordItem, phase: TestPhase) {
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/** Спокойная кнопка вердикта: мягкий фон, тёмный текст, без кричащих цветов. */
+@Composable
+fun CalmButton(text: String, bg: Color, fg: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 60.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
+        elevation = null,
+    ) {
+        Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
 

@@ -14,7 +14,10 @@ import androidx.compose.ui.unit.sp
 
 // Палитра (проверена валидатором dataviz: EN синий и RU оранжевый различимы при дальтонизме).
 object PravkaColors {
-    val Page = Color(0xFFF9F9F7)
+    /** Экраны и шапки прозрачные: фон с узором рисует EnglishBackground в корне. */
+    val Page = Color.Transparent
+    /** Настоящий цвет страницы под узором. */
+    val PageBase = Color(0xFFF9F9F7)
     val Surface = Color(0xFFFCFCFB)
     val Surface2 = Color(0xFFF1F0EC)
     val Ink = Color(0xFF0B0B0B)
@@ -54,7 +57,7 @@ private val LightColors = lightColorScheme(
     onTertiary = Color.White,
     tertiaryContainer = PravkaColors.RuSoft,
     onTertiaryContainer = PravkaColors.RuText,
-    background = PravkaColors.Page,
+    background = PravkaColors.PageBase,
     onBackground = PravkaColors.Ink,
     surface = PravkaColors.Surface,
     onSurface = PravkaColors.Ink,

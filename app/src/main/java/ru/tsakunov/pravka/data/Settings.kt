@@ -16,6 +16,8 @@ data class SettingsState(
     val batchMode: Boolean = false,
     /** При подключённых наушниках распознавание слушает микрофон телефона, а не наушников. */
     val phoneMic: Boolean = true,
+    /** Контроша с микрофоном (true) или папа отмечает ответы кнопками (false). */
+    val quizMic: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_MODEL = "claude-opus-5"
@@ -36,7 +38,13 @@ class Settings(context: Context) {
         metric = if (prefs.getString(KEY_METRIC, "spl") == "lpm") Metric.LETTERS_PER_MIN else Metric.SEC_PER_LETTER,
         batchMode = prefs.getBoolean(KEY_BATCH, false),
         phoneMic = prefs.getBoolean(KEY_PHONE_MIC, true),
+        quizMic = prefs.getBoolean(KEY_QUIZ_MIC, true),
     )
+
+    fun setQuizMic(on: Boolean) {
+        prefs.edit().putBoolean(KEY_QUIZ_MIC, on).apply()
+        _state.value = read()
+    }
 
     fun setPhoneMic(on: Boolean) {
         prefs.edit().putBoolean(KEY_PHONE_MIC, on).apply()
@@ -86,6 +94,7 @@ class Settings(context: Context) {
         const val KEY_SEED_VERSION = "seed_version"
         const val KEY_BATCH = "batch_mode"
         const val KEY_PHONE_MIC = "phone_mic"
+        const val KEY_QUIZ_MIC = "quiz_mic"
         const val KEY_MIC_PIPE_BROKEN = "mic_pipe_broken"
     }
 }

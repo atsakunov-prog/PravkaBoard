@@ -55,6 +55,20 @@ fun rememberSpeaker(): Speaker {
     return speaker
 }
 
+/** Есть ли у распознавателя Google английский язык и где: на телефоне, в сети или ещё не скачан. */
+data class EnglishSupport(val installed: Boolean, val downloadable: Boolean, val pending: Boolean, val online: Boolean, val error: String? = null) {
+    val summary: String
+        get() = when {
+            error != null -> error
+            installed -> "English скачан на телефон: распознавание идёт без сети и точнее"
+            pending -> "English скачивается на телефон"
+            downloadable && online -> "English есть только через интернет; можно скачать на телефон"
+            downloadable -> "English можно скачать на телефон"
+            online -> "English распознаётся только через интернет"
+            else -> "Распознаватель не сообщил про English"
+        }
+}
+
 /** Что сейчас слушает распознавание: телефон или внешний микрофон (наушники). */
 data class MicRoute(
     /** Есть ли подключённый внешний вход (Bluetooth-наушники, гарнитура). */
@@ -196,6 +210,64 @@ class SpeechInput(
     private fun stopFeeder() {
         feeder?.close()
         feeder = null
+    }
+
+    private fun englishIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+    }
+
+    /** Отдельный распознаватель для проверок и загрузки: рабочий не трогаем. On-device, если он есть. */
+    private fun probeRecognizer(): SpeechRecognizer? = runCatching {
+        if (Build.VERSION.SDK_INT >= 31 && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+        else SpeechRecognizer.createSpeechRecognizer(context)
+    }.getOrNull()
+
+    /**
+     * Проверка английского у распознавателя (Android 13+). Колбэк приходит на главном потоке.
+     * На старых версиях и при отказе движка — ответ с error.
+     */
+    fun checkEnglish(onResult: (EnglishSupport) -> Unit) {
+        if (Build.VERSION.SDK_INT < 33) { onResult(EnglishSupport(false, false, false, false, "Проверка языков доступна с Android 13")); return }
+        val r = probeRecognizer() ?: run { onResult(EnglishSupport(false, false, false, false, "Распознаватель недоступен")); return }
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        try {
+            r.checkRecognitionSupport(
+                englishIntent(),
+                { main.post(it) },
+                object : android.speech.RecognitionSupportCallback {
+                    override fun onSupportResult(support: android.speech.RecognitionSupport) {
+                        fun List<String>.en() = any { it.lowercase().startsWith("en") }
+                        onResult(
+                            EnglishSupport(
+                                installed = support.installedOnDeviceLanguages.en(),
+                                downloadable = support.supportedOnDeviceLanguages.en(),
+                                pending = support.pendingOnDeviceLanguages.en(),
+                                online = support.onlineLanguages.en(),
+                            ),
+                        )
+                        runCatching { r.destroy() }
+                    }
+                    override fun onError(error: Int) {
+                        onResult(EnglishSupport(false, false, false, false, "Движок не ответил про языки (код $error)"))
+                        runCatching { r.destroy() }
+                    }
+                },
+            )
+        } catch (e: Exception) {
+            onResult(EnglishSupport(false, false, false, false, "Не удалось проверить: ${e.message ?: e.javaClass.simpleName}"))
+            runCatching { r.destroy() }
+        }
+    }
+
+    /** Просит движок скачать английскую модель на телефон (Android 13+). true — запрос ушёл. */
+    fun downloadEnglish(): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return false
+        val r = probeRecognizer() ?: return false
+        return runCatching { r.triggerModelDownload(englishIntent()); true }.getOrDefault(false).also {
+            // Загрузка живёт в сервисе Google, наш экземпляр больше не нужен.
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ runCatching { r.destroy() } }, 2_000)
+        }
     }
 
     companion object {

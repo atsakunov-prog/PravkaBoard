@@ -421,6 +421,7 @@ class AppViewModel(
         onPipeUnsupported = { settings.micPipeBroken = true; showToast("Распознавание не берёт звук с микрофона телефона, слушаем как обычно") },
     )
     fun setPhoneMic(on: Boolean) { settings.setPhoneMic(on); if (on) settings.micPipeBroken = false }
+    fun setQuizMic(on: Boolean) = settings.setQuizMic(on)
     val micPipeBroken: Boolean get() = settings.micPipeBroken
 
     // ---- Настройки ----

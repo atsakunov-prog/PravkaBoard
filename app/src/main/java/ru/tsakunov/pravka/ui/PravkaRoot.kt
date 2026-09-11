@@ -25,6 +25,7 @@ import androidx.navigation.compose.rememberNavController
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.domain.IntakeKind
+import ru.tsakunov.pravka.ui.components.EnglishBackground
 import ru.tsakunov.pravka.ui.components.Tab
 import ru.tsakunov.pravka.ui.screens.GrammarDrillScreen
 import ru.tsakunov.pravka.ui.screens.GrammarListScreen
@@ -112,7 +113,7 @@ fun PravkaRoot(app: PravkaApp) {
     }
 
     PravkaTheme {
-        Box(Modifier.fillMaxSize()) {
+        EnglishBackground(Modifier.fillMaxSize()) {
             NavHost(nav, startDestination = Routes.HOME) {
                 composable(Routes.HOME) {
                     HomeScreen(

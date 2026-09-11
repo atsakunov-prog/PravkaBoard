@@ -37,6 +37,10 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     val settings by vm.settingsState.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val probe = remember { vm.speechInput(context) }
+    var english by remember { mutableStateOf<EnglishSupport?>(null) }
+    LaunchedEffect(Unit) { probe.checkEnglish { english = it } }
+    DisposableEffect(Unit) { onDispose { probe.release() } }
     val scope = rememberCoroutineScope()
 
     var key by remember(settings.apiKey) { mutableStateOf(settings.apiKey) }
@@ -141,6 +145,28 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                         )
                     }
                     Switch(checked = settings.phoneMic, onCheckedChange = { vm.setPhoneMic(it) })
+                }
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = PravkaColors.Grid)
+                Spacer(Modifier.height(8.dp))
+                Text("Английский у распознавателя", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    english?.summary ?: "Проверяю…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when { english == null -> PravkaColors.Muted; english?.installed == true -> PravkaColors.GoodText; english?.error != null -> PravkaColors.Muted; else -> PravkaColors.GoldText },
+                )
+                Text(
+                    "Если Google на телефоне настроен только на русский, английские слова он ловит плохо. Скачанный English распознаётся без сети и заметно точнее. Вручную: Настройки → Google → Голосовой ввод → Офлайн-распознавание речи.",
+                    style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 4.dp),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    if (english != null && english?.installed != true && english?.downloadable == true) {
+                        TextButton(onClick = {
+                            val ok = probe.downloadEnglish()
+                            vm.showToast(if (ok) "Попросил Google скачать English, проверь через минуту" else "Не удалось запустить загрузку")
+                        }) { Text("Скачать English на телефон", color = PravkaColors.EnText) }
+                    }
+                    TextButton(onClick = { english = null; probe.checkEnglish { english = it } }) { Text("Проверить ещё раз", color = PravkaColors.Ink2) }
                 }
             }
             PravkaCard {
