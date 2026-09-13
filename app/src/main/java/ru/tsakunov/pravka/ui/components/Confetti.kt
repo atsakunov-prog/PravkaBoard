@@ -34,6 +34,8 @@ private class Particle(
  */
 @Composable
 fun ConfettiOverlay(trigger: Int, modifier: Modifier = Modifier, big: Boolean = true) {
+    // На E-Ink три секунды летящих частиц превращаются в серую кашу с шлейфами; рекорд там подсвечивает плашка.
+    if (PravkaColors.reader) return
     val particles = remember { mutableStateOf<List<Particle>>(emptyList()) }
     var frame by remember { mutableLongStateOf(0L) }
     val colors = remember {

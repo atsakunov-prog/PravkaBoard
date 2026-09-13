@@ -46,6 +46,7 @@ import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.fmtTime
 import ru.tsakunov.pravka.ui.plural
 import ru.tsakunov.pravka.ui.theme.PravkaColors
+import ru.tsakunov.pravka.ui.theme.motion
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import kotlin.math.roundToInt
 
@@ -405,7 +406,7 @@ private fun MicPanel(
     onSaid: () -> Unit, onRetry: () -> Unit, onSkip: () -> Unit, onFinish: () -> Unit, onSpeak: () -> Unit,
 ) {
     val reading = m.step == Step.READ
-    val accent by animateColorAsState(if (reading) PravkaColors.En else PravkaColors.Ru, label = "accent")
+    val accent by animateColorAsState(if (reading) PravkaColors.En else PravkaColors.Ru, animationSpec = motion(), label = "accent")
     val soft = if (reading) PravkaColors.EnSoft else PravkaColors.RuSoft
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("${m.idx + 1} / $total", style = MaterialTheme.typography.labelLarge, color = PravkaColors.Muted)

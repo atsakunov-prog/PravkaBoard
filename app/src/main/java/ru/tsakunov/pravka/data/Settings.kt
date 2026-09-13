@@ -2,8 +2,10 @@ package ru.tsakunov.pravka.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import ru.tsakunov.pravka.domain.isEinkDevice
 
 /** Метрика скорости на графиках. */
 enum class Metric { SEC_PER_LETTER, LETTERS_PER_MIN }
@@ -18,15 +20,32 @@ data class SettingsState(
     val phoneMic: Boolean = true,
     /** Контроша с микрофоном (true) или папа отмечает ответы кнопками (false). */
     val quizMic: Boolean = true,
+    /** Режим ридера: контрастная палитра, без узора и анимаций. По умолчанию включён на электронных книгах. */
+    val readerMode: Boolean = false,
+    /** Масштаб интерфейса: 1.0 как на телефоне, больше — крупнее всё разом. */
+    val uiScale: Float = 1f,
+    /** Синхронизация через файл в ветке data репозитория PravkaBoard. */
+    val syncEnabled: Boolean = false,
+    /** Токен GitHub с правом Contents: read and write. Без него приложение только принимает данные. */
+    val githubToken: String = "",
+    val lastSyncAt: Long = 0L,
+    /** Короткий итог последней синхронизации: «получено 12» или текст ошибки. */
+    val lastSyncNote: String = "",
+    val lastSyncOk: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_MODEL = "claude-opus-5"
+        /** Шаги масштаба в настройках. */
+        val UI_SCALES = listOf(1f, 1.25f, 1.5f, 1.75f)
     }
 }
 
 class Settings(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("pravka_settings", Context.MODE_PRIVATE)
+
+    /** Электронная книга: режим ридера и крупный интерфейс включаются сами, пока Саша не решит иначе. */
+    val isEink: Boolean = isEinkDevice(Build.MANUFACTURER, Build.BRAND, Build.MODEL)
 
     private val _state = MutableStateFlow(read())
     val state: StateFlow<SettingsState> = _state
@@ -39,7 +58,43 @@ class Settings(context: Context) {
         batchMode = prefs.getBoolean(KEY_BATCH, false),
         phoneMic = prefs.getBoolean(KEY_PHONE_MIC, true),
         quizMic = prefs.getBoolean(KEY_QUIZ_MIC, true),
+        readerMode = prefs.getBoolean(KEY_READER_MODE, isEink),
+        uiScale = prefs.getFloat(KEY_UI_SCALE, if (isEink) 1.5f else 1f).coerceIn(1f, 2f),
+        syncEnabled = prefs.getBoolean(KEY_SYNC_ENABLED, false),
+        githubToken = prefs.getString(KEY_GITHUB_TOKEN, "") ?: "",
+        lastSyncAt = prefs.getLong(KEY_LAST_SYNC_AT, 0L),
+        lastSyncNote = prefs.getString(KEY_LAST_SYNC_NOTE, "") ?: "",
+        lastSyncOk = prefs.getBoolean(KEY_LAST_SYNC_OK, true),
     )
+
+    fun setReaderMode(on: Boolean) {
+        prefs.edit().putBoolean(KEY_READER_MODE, on).apply()
+        _state.value = read()
+    }
+
+    fun setUiScale(scale: Float) {
+        prefs.edit().putFloat(KEY_UI_SCALE, scale.coerceIn(1f, 2f)).apply()
+        _state.value = read()
+    }
+
+    fun setSyncEnabled(on: Boolean) {
+        prefs.edit().putBoolean(KEY_SYNC_ENABLED, on).apply()
+        _state.value = read()
+    }
+
+    fun setGithubToken(value: String) {
+        prefs.edit().putString(KEY_GITHUB_TOKEN, value.trim()).apply()
+        _state.value = read()
+    }
+
+    fun recordSync(ok: Boolean, note: String) {
+        prefs.edit()
+            .putLong(KEY_LAST_SYNC_AT, System.currentTimeMillis())
+            .putString(KEY_LAST_SYNC_NOTE, note)
+            .putBoolean(KEY_LAST_SYNC_OK, ok)
+            .apply()
+        _state.value = read()
+    }
 
     fun setQuizMic(on: Boolean) {
         prefs.edit().putBoolean(KEY_QUIZ_MIC, on).apply()
@@ -96,5 +151,12 @@ class Settings(context: Context) {
         const val KEY_PHONE_MIC = "phone_mic"
         const val KEY_QUIZ_MIC = "quiz_mic"
         const val KEY_MIC_PIPE_BROKEN = "mic_pipe_broken"
+        const val KEY_READER_MODE = "reader_mode"
+        const val KEY_UI_SCALE = "ui_scale"
+        const val KEY_SYNC_ENABLED = "sync_enabled"
+        const val KEY_GITHUB_TOKEN = "github_token"
+        const val KEY_LAST_SYNC_AT = "last_sync_at"
+        const val KEY_LAST_SYNC_NOTE = "last_sync_note"
+        const val KEY_LAST_SYNC_OK = "last_sync_ok"
     }
 }

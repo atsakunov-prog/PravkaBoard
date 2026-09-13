@@ -36,6 +36,7 @@ import ru.tsakunov.pravka.domain.Matching
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.fmtTime
 import ru.tsakunov.pravka.ui.theme.PravkaColors
+import ru.tsakunov.pravka.ui.theme.motion
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import ru.tsakunov.pravka.ui.wordsWord
 
@@ -315,7 +316,7 @@ private fun WordCard(item: WordItem, phase: TestPhase) {
         is TestPhase.Wrong -> Color(0xFFFBDADA)
         else -> PravkaColors.Surface
     }
-    val bg by animateColorAsState(target, label = "card")
+    val bg by animateColorAsState(target, animationSpec = motion(), label = "card")
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -352,7 +353,7 @@ fun CalmButton(text: String, bg: Color, fg: Color, onClick: () -> Unit, modifier
 /** Большая круглая кнопка микрофона: серая — нажми и говори, красная с квадратом — говоришь, нажми, когда сказал. */
 @Composable
 fun MicButton(listening: Boolean, onClick: () -> Unit, size: Int = 96) {
-    val bg by animateColorAsState(if (listening) PravkaColors.Danger else PravkaColors.Ru, label = "mic")
+    val bg by animateColorAsState(if (listening) PravkaColors.Danger else PravkaColors.Ru, animationSpec = motion(), label = "mic")
     Box(
         Modifier.size(size.dp).background(bg, CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

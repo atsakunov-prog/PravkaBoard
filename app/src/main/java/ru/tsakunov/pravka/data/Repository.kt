@@ -2,11 +2,11 @@ package ru.tsakunov.pravka.data
 
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
-import org.json.JSONArray
-import org.json.JSONObject
+import ru.tsakunov.pravka.domain.Backup
 import ru.tsakunov.pravka.domain.GrammarSetContent
 import ru.tsakunov.pravka.domain.HomeworkResult
 import ru.tsakunov.pravka.domain.ReadingDetail
+import ru.tsakunov.pravka.domain.Snapshot
 import ru.tsakunov.pravka.domain.countWords
 import java.util.UUID
 
@@ -24,6 +24,7 @@ class Repository(
     private val storyList get() = db.storyListDao()
     private val intake get() = db.intakeDao()
     private val activity get() = db.activityDao()
+    private val tombstones get() = db.tombstoneDao()
 
     // ---- Наблюдение ----
     fun observeLists(): Flow<List<WordListWithCount>> = lists.observeLists()
@@ -41,12 +42,13 @@ class Repository(
 
     // ---- Списки ----
     suspend fun createList(title: String, items: List<Pair<String, String>>, kinds: List<String>? = null): WordList {
-        val list = WordList(id = newId(), title = title.trim().ifBlank { "Список слов" }, createdAt = System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val list = WordList(id = newId(), title = title.trim().ifBlank { "Список слов" }, createdAt = now, updatedAt = now)
         val rows = items.mapIndexedNotNull { idx, (en, ru) ->
             val e = en.trim()
             val r = ru.trim()
             if (e.isEmpty() && r.isEmpty()) null
-            else WordItem(id = newId(), listId = list.id, en = e, ru = r, kind = kinds?.getOrNull(idx) ?: "word", position = idx)
+            else WordItem(id = newId(), listId = list.id, en = e, ru = r, kind = kinds?.getOrNull(idx) ?: "word", position = idx, updatedAt = now)
         }
         db.withTransaction {
             lists.insertList(list)
@@ -57,10 +59,10 @@ class Repository(
 
     suspend fun renameList(id: String, title: String) {
         val l = lists.getList(id) ?: return
-        lists.updateList(l.copy(title = title.trim().ifBlank { l.title }))
+        lists.updateList(l.copy(title = title.trim().ifBlank { l.title }, updatedAt = System.currentTimeMillis()))
     }
 
-    suspend fun deleteList(id: String) = lists.deleteList(id)
+    suspend fun deleteList(id: String) = db.withTransaction { lists.deleteList(id); bury(Tombstone.LIST, id) }
 
     suspend fun getItems(listId: String): List<WordItem> = lists.getItems(listId)
     suspend fun getItem(id: String): WordItem? = lists.getItem(id)
@@ -68,16 +70,16 @@ class Repository(
     suspend fun addItem(listId: String, en: String, ru: String): WordItem {
         val item = WordItem(
             id = newId(), listId = listId, en = en.trim(), ru = ru.trim(), kind = "word",
-            position = lists.maxPosition(listId) + 1,
+            position = lists.maxPosition(listId) + 1, updatedAt = System.currentTimeMillis(),
         )
         lists.insertItems(listOf(item))
         return item
     }
 
     suspend fun updateItem(item: WordItem, en: String, ru: String) =
-        lists.updateItem(item.copy(en = en.trim(), ru = ru.trim()))
+        lists.updateItem(item.copy(en = en.trim(), ru = ru.trim(), updatedAt = System.currentTimeMillis()))
 
-    suspend fun deleteItem(item: WordItem) = lists.deleteItem(item)
+    suspend fun deleteItem(item: WordItem) = db.withTransaction { lists.deleteItem(item); bury(Tombstone.ITEM, item.id) }
 
     // ---- Попытки ----
     suspend fun addAttempt(
@@ -98,7 +100,7 @@ class Repository(
         return a
     }
 
-    suspend fun deleteAttempt(id: String) = attempts.delete(id)
+    suspend fun deleteAttempt(id: String) = db.withTransaction { attempts.delete(id); bury(Tombstone.ATTEMPT, id) }
 
     // ---- Рассказы и контрольные ----
     fun observeStory(listId: String): Flow<Story?> = stories.observeLatest(listId)
@@ -139,7 +141,7 @@ class Repository(
         return id
     }
 
-    suspend fun deleteHomework(id: String) = homeworks.delete(id)
+    suspend fun deleteHomework(id: String) = db.withTransaction { homeworks.delete(id); bury(Tombstone.HOMEWORK, id) }
 
     // ---- Грамматика ----
     fun observeGrammarSets(): Flow<List<GrammarSet>> = grammar.observeSets()
@@ -153,7 +155,7 @@ class Repository(
         return set
     }
 
-    suspend fun deleteGrammarSet(id: String) = grammar.deleteSet(id)
+    suspend fun deleteGrammarSet(id: String) = db.withTransaction { grammar.deleteSet(id); bury(Tombstone.GRAMMAR_SET, id) }
 
     /** Записывает ответ по карточке уровня; возвращает обновлённый прогресс (passed выставляется при серии из STREAK_TO_PASS). */
     suspend fun recordGrammarAnswer(setId: String, ruleIndex: Int, correct: Boolean, currentStreak: Int): GrammarProgress = db.withTransaction {
@@ -176,7 +178,7 @@ class Repository(
     fun observeReadingText(id: String): Flow<ReadingText?> = reading.observeText(id)
     fun observeReadingRuns(): Flow<List<ReadingRun>> = reading.observeAllRuns()
     fun observeAllStories(): Flow<List<Story>> = storyList.observeAllStories()
-    suspend fun deleteStory(id: String) = db.withTransaction { reading.deleteRunsForText(id); stories.deleteById(id) }
+    suspend fun deleteStory(id: String) = db.withTransaction { reading.deleteRunsForText(id); stories.deleteById(id); bury(Tombstone.STORY, id) }
     fun observeStoryById(id: String): Flow<Story?> = storyList.observeStoryById(id)
 
     suspend fun saveReadingText(title: String, textEn: String, textRu: String): ReadingText {
@@ -186,7 +188,7 @@ class Repository(
     }
 
     /** Текст удаляется вместе со своими чтениями: без текста им негде показываться. */
-    suspend fun deleteReadingText(id: String) = db.withTransaction { reading.deleteRunsForText(id); reading.deleteText(id) }
+    suspend fun deleteReadingText(id: String) = db.withTransaction { reading.deleteRunsForText(id); reading.deleteText(id); bury(Tombstone.READING_TEXT, id) }
 
     suspend fun addReadingRun(textId: String, durationMs: Long, stumbles: Int, words: Int): ReadingRun {
         val run = ReadingRun(id = newId(), textId = textId, ts = System.currentTimeMillis(), durationMs = durationMs, stumbles = stumbles, words = words)
@@ -205,82 +207,130 @@ class Repository(
         return run
     }
 
-    suspend fun deleteReadingRun(id: String) = reading.deleteRun(id)
+    suspend fun deleteReadingRun(id: String) = db.withTransaction { reading.deleteRun(id); bury(Tombstone.READING_RUN, id) }
 
-    // ---- Резервная копия ----
-    suspend fun exportJson(): String {
-        val root = JSONObject()
-        root.put("version", 1)
-        root.put("exportedAt", System.currentTimeMillis())
-        root.put("lists", JSONArray().also { arr ->
-            lists.allLists().forEach { l ->
-                arr.put(JSONObject().put("id", l.id).put("title", l.title).put("createdAt", l.createdAt))
+    // ---- Резервная копия и синхронизация ----
+    /** Слепок всего, что стоит переносить между устройствами. Разборы всей домашки остаются на своём телефоне. */
+    suspend fun snapshot(): Snapshot = Snapshot(
+        lists = lists.allLists(), items = lists.allItems(), attempts = attempts.all(),
+        stories = stories.all(), quizRuns = quizRuns.all(),
+        homeworks = homeworks.all(), homeworkChecks = homeworks.allChecks(),
+        grammarSets = grammar.allSets(), grammarProgress = grammar.allProgress(),
+        readingTexts = reading.allTexts(), readingRuns = reading.allRuns(),
+        activity = activity.all(), tombstones = tombstones.all(),
+        exportedAt = System.currentTimeMillis(),
+    )
+
+    suspend fun exportJson(): String = Backup.toJson(snapshot(), pretty = true)
+
+    /** Импорт из файла: то же слияние, что и в синхронизации. Возвращает число принятых записей. */
+    suspend fun importJson(text: String): Int = importSnapshot(Backup.parse(text))
+
+    /**
+     * Слияние слепка с местной базой. Правила:
+     * - надгробия применяются первыми: что удалили на другом устройстве, удаляется и здесь и больше не принимается;
+     * - списки, слова, домашки и прогресс по правилам берутся более поздние по updatedAt; при равном времени и разном
+     *   содержимом побеждает чужая версия (иначе две копии со старыми записями без updatedAt расходились бы навсегда
+     *   и пересылали файл друг другу при каждом проходе), при одинаковом содержимом ничего не пишется;
+     * - попытки, контроши, проверки, рассказы, тексты, правила и журнал занятий после создания не меняются, поэтому
+     *   добавляются только новые по id;
+     * - дочерние записи без родителя (слово без списка, проверка без домашки) пропускаются, иначе упадёт внешний ключ;
+     * - родители обновляются через UPDATE, не через REPLACE: REPLACE удалил бы строку и каскадом её детей.
+     * Возвращает число добавленных, обновлённых и удалённых записей.
+     */
+    suspend fun importSnapshot(s: Snapshot): Int = db.withTransaction {
+        var changed = 0
+        val known = tombstones.all().map { it.id }.toHashSet()
+        val incomingGraves = s.tombstones.filter { it.id !in known }
+        incomingGraves.forEach { if (applyTombstone(it)) changed++ }
+        tombstones.insertAll(incomingGraves)
+        val dead = known + s.tombstones.map { it.id }
+
+        val listIds = lists.allLists().map { it.id }.toHashSet()
+        for (l in s.lists) {
+            if (l.id in dead) continue
+            val existing = lists.getList(l.id)
+            when {
+                existing == null -> { lists.insertList(l); listIds += l.id; changed++ }
+                l.newerThan(existing.updatedAt, existing) -> { lists.updateList(l); changed++ }
             }
-        })
-        root.put("items", JSONArray().also { arr ->
-            lists.allItems().forEach { i ->
-                arr.put(
-                    JSONObject().put("id", i.id).put("listId", i.listId).put("en", i.en).put("ru", i.ru)
-                        .put("kind", i.kind).put("position", i.position),
-                )
+        }
+        val newItems = s.items.filter { it.id !in dead && it.listId in listIds }.filter { i ->
+            val existing = lists.getItem(i.id)
+            existing == null || i.newerThan(existing.updatedAt, existing)
+        }
+        lists.insertItems(newItems)
+        changed += newItems.size
+
+        changed += insertMissing(attempts.allIds(), s.attempts.filter { it.id !in dead }, { it.id }) { attempts.insertAll(it) }
+        val storyIds = stories.allIds().toHashSet()
+        changed += insertMissing(storyIds, s.stories.filter { it.id !in dead && it.listId in listIds }, { it.id }) { batch ->
+            batch.forEach { stories.insert(it) }
+            storyIds += batch.map { it.id }
+        }
+        changed += insertMissing(quizRuns.allIds(), s.quizRuns.filter { it.id !in dead && it.listId !in dead }, { it.id }) { quizRuns.insertAll(it) }
+
+        val homeworkIds = homeworks.all().map { it.id }.toHashSet()
+        for (h in s.homeworks) {
+            if (h.id in dead) continue
+            val existing = homeworks.get(h.id)
+            when {
+                existing == null -> { homeworks.insert(h); homeworkIds += h.id; changed++ }
+                h.newerThan(existing.updatedAt, existing) -> { homeworks.update(h); changed++ }
             }
-        })
-        root.put("attempts", JSONArray().also { arr ->
-            attempts.all().forEach { a ->
-                arr.put(
-                    JSONObject().put("id", a.id).put("ts", a.ts).put("lang", a.lang)
-                        .put("word", a.word ?: JSONObject.NULL).put("letters", a.letters).put("ms", a.ms)
-                        .put("source", a.source).put("listId", a.listId ?: JSONObject.NULL)
-                        .put("itemId", a.itemId ?: JSONObject.NULL),
-                )
-            }
-        })
-        return root.toString(2)
+        }
+        changed += insertMissing(homeworks.allCheckIds(), s.homeworkChecks.filter { it.id !in dead && it.homeworkId in homeworkIds }, { it.id }) { homeworks.insertChecks(it) }
+
+        val setIds = grammar.allSetIds().toHashSet()
+        changed += insertMissing(setIds, s.grammarSets.filter { it.id !in dead }, { it.id }) { batch ->
+            batch.forEach { grammar.insertSet(it) }
+            setIds += batch.map { it.id }
+        }
+        for (p in s.grammarProgress) {
+            if (p.setId !in setIds) continue
+            val existing = grammar.getProgress(p.setId, p.ruleIndex)
+            if (existing == null || p.newerThan(existing.updatedAt, existing)) { grammar.upsertProgress(p); changed++ }
+        }
+
+        val textIds = reading.allTextIds().toHashSet()
+        changed += insertMissing(textIds, s.readingTexts.filter { it.id !in dead }, { it.id }) { batch ->
+            batch.forEach { reading.insertText(it) }
+            textIds += batch.map { it.id }
+        }
+        // Чтения ссылаются либо на текст, либо на рассказ; без родителя им негде показываться.
+        changed += insertMissing(reading.allRunIds(), s.readingRuns.filter { it.id !in dead && (it.textId in textIds || it.textId in storyIds) }, { it.id }) { reading.insertRuns(it) }
+        changed += insertMissing(activity.allIds(), s.activity.filter { it.id !in dead }, { it.id }) { activity.insertAll(it) }
+        changed
     }
 
-    /** Импорт объединяет данные: записи с теми же id заменяются, новые добавляются. */
-    suspend fun importJson(text: String): Int {
-        val root = JSONObject(text)
-        val newLists = ArrayList<WordList>()
-        val newItems = ArrayList<WordItem>()
-        val newAttempts = ArrayList<Attempt>()
-        root.optJSONArray("lists")?.let { arr ->
-            for (k in 0 until arr.length()) {
-                val o = arr.getJSONObject(k)
-                newLists += WordList(o.getString("id"), o.optString("title", "Список"), o.optLong("createdAt", System.currentTimeMillis()))
-            }
-        }
-        root.optJSONArray("items")?.let { arr ->
-            for (k in 0 until arr.length()) {
-                val o = arr.getJSONObject(k)
-                newItems += WordItem(
-                    o.getString("id"), o.getString("listId"), o.optString("en", ""), o.optString("ru", ""),
-                    o.optString("kind", "word"), o.optInt("position", k),
-                )
-            }
-        }
-        root.optJSONArray("attempts")?.let { arr ->
-            for (k in 0 until arr.length()) {
-                val o = arr.getJSONObject(k)
-                val letters = o.optInt("letters", 0)
-                val ms = o.optLong("ms", 0)
-                if (letters <= 0 || ms <= 0) continue
-                newAttempts += Attempt(
-                    id = o.optString("id").ifBlank { newId() }, ts = o.optLong("ts", System.currentTimeMillis()),
-                    lang = o.optString("lang", "en"), word = o.optString("word").takeIf { it.isNotBlank() && it != "null" },
-                    letters = letters, ms = ms, source = o.optString("source", Attempt.SOURCE_MANUAL),
-                    listId = o.optString("listId").takeIf { it.isNotBlank() && it != "null" },
-                    itemId = o.optString("itemId").takeIf { it.isNotBlank() && it != "null" },
-                )
-            }
-        }
-        db.withTransaction {
-            newLists.forEach { lists.insertList(it) }
-            lists.insertItems(newItems)
-            attempts.insertAll(newAttempts)
-        }
-        return newAttempts.size
+    /** Чужая запись побеждает, если она новее или ровесница с другим содержимым; одинаковую не трогаем. */
+    private fun WordList.newerThan(existingUpdatedAt: Long, existing: WordList) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
+    private fun WordItem.newerThan(existingUpdatedAt: Long, existing: WordItem) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
+    private fun Homework.newerThan(existingUpdatedAt: Long, existing: Homework) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
+    private fun GrammarProgress.newerThan(existingUpdatedAt: Long, existing: GrammarProgress) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
+
+    private suspend fun <T> insertMissing(existingIds: Collection<String>, incoming: List<T>, id: (T) -> String, insert: suspend (List<T>) -> Unit): Int {
+        val have = if (existingIds is Set<String>) existingIds else existingIds.toHashSet()
+        val fresh = incoming.filter { id(it) !in have }.distinctBy(id)
+        if (fresh.isNotEmpty()) insert(fresh)
+        return fresh.size
     }
+
+    /** Удаление по надгробию с другого устройства; true, если что-то удалилось. */
+    private suspend fun applyTombstone(t: Tombstone): Boolean = when (t.kind) {
+        Tombstone.LIST -> lists.getList(t.id)?.let { lists.deleteList(t.id); true } ?: false
+        Tombstone.ITEM -> lists.getItem(t.id)?.let { lists.deleteItemById(t.id); true } ?: false
+        Tombstone.ATTEMPT -> { attempts.delete(t.id); true }
+        Tombstone.STORY -> { reading.deleteRunsForText(t.id); stories.deleteById(t.id); true }
+        Tombstone.HOMEWORK -> homeworks.get(t.id)?.let { homeworks.delete(t.id); true } ?: false
+        Tombstone.GRAMMAR_SET -> { grammar.deleteSet(t.id); true }
+        Tombstone.READING_TEXT -> { reading.deleteRunsForText(t.id); reading.deleteText(t.id); true }
+        Tombstone.READING_RUN -> { reading.deleteRun(t.id); true }
+        else -> false
+    }
+
+    /** Помечает удалённую запись, чтобы синхронизация не вернула её обратно. Вызывать внутри транзакции удаления. */
+    private suspend fun bury(kind: String, id: String) = tombstones.insert(Tombstone(id = id, kind = kind, ts = System.currentTimeMillis()))
 
     suspend fun resetAll() {
         db.withTransaction {

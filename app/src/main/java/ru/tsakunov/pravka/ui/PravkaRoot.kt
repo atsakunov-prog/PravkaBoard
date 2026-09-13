@@ -1,18 +1,26 @@
 package ru.tsakunov.pravka.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -112,9 +120,24 @@ fun PravkaRoot(app: PravkaApp) {
         onDispose { view.keepScreenOn = false }
     }
 
-    PravkaTheme {
-        EnglishBackground(Modifier.fillMaxSize()) {
-            NavHost(nav, startDestination = Routes.HOME) {
+    // Масштаб интерфейса: подменяем плотность, и всё в dp и sp растёт разом, включая отступы под системные
+    // панели (они приходят в пикселях и делятся на ту же плотность). На книжке по умолчанию 150%.
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
+    val baseDensity = LocalDensity.current
+    val density = remember(baseDensity, settings.uiScale) { Density(baseDensity.density * settings.uiScale, baseDensity.fontScale) }
+    val reader = settings.readerMode
+
+    CompositionLocalProvider(LocalDensity provides density) {
+    PravkaTheme(reader = reader) {
+        EnglishBackground(Modifier.fillMaxSize(), pattern = !reader) {
+            // На E-Ink перекрёстное затухание экранов оставляет след, поэтому в режиме ридера переходов нет.
+            NavHost(
+                nav, startDestination = Routes.HOME,
+                enterTransition = { if (reader) EnterTransition.None else fadeIn(tween(700)) },
+                exitTransition = { if (reader) ExitTransition.None else fadeOut(tween(700)) },
+                popEnterTransition = { if (reader) EnterTransition.None else fadeIn(tween(700)) },
+                popExitTransition = { if (reader) ExitTransition.None else fadeOut(tween(700)) },
+            ) {
                 composable(Routes.HOME) {
                     HomeScreen(
                         vm = vm,
@@ -252,6 +275,7 @@ fun PravkaRoot(app: PravkaApp) {
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp),
             )
         }
+    }
     }
 }
 

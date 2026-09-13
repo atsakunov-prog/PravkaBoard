@@ -12,8 +12,10 @@
 домашка»: пакет фото раскладывается по вкладкам, при желании через Message Batches вдвое дешевле.
 Весь ИИ — Claude через Messages API с принудительным вызовом инструмента и strict-схемой.
 
-Пользователей двое: папа и ребёнок. Интерфейс на русском, кавычки «ёлочки», без эмодзи, крупные кнопки и
-цифры, никаких длинных текстов на экране ребёнка. Тон подписей дружелюбный, без сюсюканья.
+Пользователей двое: папа и ребёнок. Устройств тоже два: телефон папы и электронная книга Бори (цветной
+E-Ink), данные между ними ходят через файл в ветке `data` репозитория. Интерфейс на русском, кавычки
+«ёлочки», без эмодзи, крупные кнопки и цифры, никаких длинных текстов на экране ребёнка. Тон подписей
+дружелюбный, без сюсюканья.
 
 ## Сборка и проверка
 
@@ -49,8 +51,9 @@ app/src/main/java/ru/tsakunov/pravka/
   PravkaApp.kt, MainActivity.kt      ручной DI (Repository, Settings), edge-to-edge
   data/Entities.kt                   Room-сущности; вложенные структуры лежат JSON-строками
   data/Daos.kt, AppDatabase.kt       версия схемы и AutoMigration-цепочка; схемы экспортируются в app/schemas
-  data/Repository.kt                 всё обращение к базе; транзакции через db.withTransaction
-  data/Settings.kt                   SharedPreferences: ключ, модель, метрика, пакетный режим, версия посева
+  data/Repository.kt                 всё обращение к базе; транзакции через db.withTransaction; слияние слепков
+  data/SyncManager.kt                проход синхронизации с GitHub, состояние для настроек, троттлинг
+  data/Settings.kt                   SharedPreferences: ключ, модель, метрика, режим ридера, масштаб, токен GitHub
   data/Seed.kt                       бумажная статистика сентября 2026 (VERSION растёт при правках)
   domain/                            чистые функции: Stats, Repeats, ByLength, Matching, Reading, Overview,
                                      модели Homework, Grammar, Intake — всё покрыто юнит-тестами
@@ -59,12 +62,15 @@ app/src/main/java/ru/tsakunov/pravka/
   api/ClaudeBatch.kt                 Message Batches: create / status / results (JSONL)
   api/Images.kt                      фото → JPEG base64, длинная сторона 1568 px, на Dispatchers.IO
   api/Updater.kt                     GitHub Releases → скачивание → системный установщик
+  api/GitHubStore.kt                 файл pravka-data.json в ветке data: fetch / push / пустая ветка через Git Data API
+  domain/Backup.kt                   Snapshot всех таблиц ↔ JSON (версия 2, читает и версию 1), fingerprint
+  domain/Device.kt                   isEinkDevice по производителю: умолчания для ридера
   ui/PravkaRoot.kt                   Routes и NavHost; switchTab с save/restore state
   ui/vm/AppViewModel.kt              состояния экранов (sealed interface), кэш Flow по ключу
   ui/vm/IntakeCoordinator.kt         разбор всей домашки: сортировка страниц, параллельно или пакетом
   ui/screens/                        по экрану на файл; фазы экрана — sealed interface
   ui/components/                     Common (Tab, кнопки, Pill, PravkaCard), Speech, PhotoPicker, графики
-  ui/theme/                          PravkaColors: EN синий, RU оранжевый, тёплые поверхности
+  ui/theme/                          Palette × 2 (Warm, Ink), PravkaColors читает текущую из mutableStateOf, motion()
 ```
 
 ## Правила, которые легко нарушить
@@ -76,6 +82,26 @@ app/src/main/java/ru/tsakunov/pravka/
 - Сложные структуры (результат проверки, набор правил, разбор чтения, части разбора домашки) хранятся
   JSON-строкой рядом с моделью `toJson`/`fromJson` в `domain/`. Разбор всегда терпимый (`opt*`, `runCatching`).
 - Удаление родителя чистит зависимые записи явно в Repository (чтения текста, рассказы), не полагаясь на UI.
+- `WordList` и `WordItem` несут `updatedAt`: любая правка через Repository ставит текущее время, иначе
+  синхронизация не поймёт, какая версия новее.
+- `@Insert(REPLACE)` на родителе (список, домашка, набор правил) удаляет строку и каскадом её детей. Для
+  обновления существующей записи только `@Update`; так сделано в `importSnapshot`.
+
+### Синхронизация и резервная копия
+- Формат один: `domain/Backup.kt`. Новая таблица, которую надо переносить, добавляется в `Snapshot`, в `toJson` /
+  `parse`, в `Repository.snapshot()` и в `importSnapshot` (плюс тест круговой конвертации в `BackupTest`).
+- Слияние в `Repository.importSnapshot`: надгробия применяются первыми; неизменяемые записи добавляются по id;
+  изменяемые (списки, слова, домашки, прогресс) берутся по большему `updatedAt`; при равном времени и разном
+  содержимом побеждает чужая (так копии сходятся), при одинаковом ничего не пишется;
+  дети без родителя пропускаются. Порядок вставки: родители раньше детей.
+- Любое удаление, которое должно дойти до другого устройства, идёт через Repository и внутри той же транзакции
+  вызывает `bury(kind, id)`. Новый вид удаления = новая константа в `Tombstone` и ветка в `applyTombstone`.
+- `SyncManager.sync` держит `Mutex.tryLock`: второй проход поверх идущего не запускается, а возвращает текущее
+  состояние. Автозапуск (старт, `MainActivity.onStop`) не чаще раза в минуту. Конфликт записи (файл изменился)
+  разрешается одним повтором: забрать → влить → отправить.
+- Ветка `data` не входит в триггеры `build.yml` (`main`, `claude/**`): коммиты данных не собирают APK. Не
+  расширять триггеры так, чтобы они её захватили.
+- В `GitHubStore` нет `/**` внутри комментариев: блочные комментарии Kotlin вложенные, `claude/**` ломает файл.
 
 ### Claude API
 - Модель по умолчанию `claude-opus-5` (`Settings`). Все вызовы через `ClaudeApi.callTool` с `strict: true`,
@@ -105,6 +131,14 @@ app/src/main/java/ru/tsakunov/pravka/
 - Нижняя панель на шести вкладках: подписи у всех только при ширине ≥ 480 dp.
 - `PravkaColors.Page` прозрачный: настоящий фон с узором рисует `EnglishBackground` в `PravkaRoot`, экраны и
   шапки его не перекрывают. Непрозрачный цвет листа — `PravkaColors.PageBase`.
+- `PravkaColors.X` — геттеры поверх `mutableStateOf<Palette>`: читаются как раньше, при смене режима ридера всё
+  перекрашивается само. Не кэшировать цвета в `remember` без ключа `PravkaColors.palette`. Новый цвет = поле в
+  `Palette` с двумя значениями (Warm и Ink); для E-Ink: насыщеннее, темнее, никакого серого текста и альфы.
+- Режим ридера (`PravkaColors.reader`): без конфетти (`ConfettiOverlay` сам выходит), без переходов NavHost,
+  анимация цвета через `animationSpec = motion()` (snap). Новые анимации делать так же.
+- Масштаб интерфейса подменяет `LocalDensity` в корне. Ширину экрана мерить через `BoxWithConstraints`, а не
+  `LocalConfiguration.screenWidthDp`: Configuration масштаба не знает.
+- Палитра ставится в `MainActivity.onCreate` до `setContent`, чтобы книжка не мигала тёплой темой на старте.
 
 ### Речь
 - `SpeechInput` держит один `SpeechRecognizer` и делает `cancel()` между репликами; пересоздание даёт

@@ -7,6 +7,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -234,7 +235,7 @@ private fun ResultBlock(attempt: Attempt, v: Verdict) {
         }
         Spacer(Modifier.height(14.dp))
         val shown = remember { MutableTransitionState(false).apply { targetState = true } }
-        AnimatedVisibility(visibleState = shown, enter = scaleIn(spring(dampingRatio = 0.5f)) + fadeIn()) {
+        AnimatedVisibility(visibleState = shown, enter = if (PravkaColors.reader) EnterTransition.None else scaleIn(spring(dampingRatio = 0.5f)) + fadeIn()) {
             val (bg, fg, label) = when (v.kind) {
                 VerdictKind.RECORD -> Triple(PravkaColors.GoldSoft, PravkaColors.GoldText, "НОВЫЙ РЕКОРД!")
                 VerdictKind.FASTER -> Triple(PravkaColors.GoodSoft, PravkaColors.GoodText, "Быстрее среднего")

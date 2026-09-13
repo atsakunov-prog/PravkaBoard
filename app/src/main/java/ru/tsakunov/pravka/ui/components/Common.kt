@@ -17,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,7 +60,8 @@ fun PravkaCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
         shape = MaterialTheme.shapes.large,
         color = PravkaColors.Surface,
         tonalElevation = 0.dp,
-        shadowElevation = 1.dp,
+        // На E-Ink тень выглядит грязью под карточкой, границу там даёт сплошная рамка.
+        shadowElevation = if (PravkaColors.reader) 0.dp else 1.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, PravkaColors.Border),
     ) {
         Column(Modifier.padding(16.dp), content = content)
@@ -86,11 +86,12 @@ enum class Tab(val label: String) {
 
 /**
  * Шесть вкладок: на узком экране подписи показываются только у выбранной (иначе «Грамматика» и «Статистика»
- * не помещаются), на широком (раскрытый складной телефон, планшет) — у всех.
+ * не помещаются), на широком (раскрытый складной телефон, планшет) — у всех. Ширина берётся из ограничений,
+ * а не из Configuration: при увеличенном масштабе интерфейса dp «толще», и книжка в 150% ведёт себя как телефон.
  */
 @Composable
-fun PravkaBottomBar(current: Tab, onSelect: (Tab) -> Unit) {
-    val wide = LocalConfiguration.current.screenWidthDp >= 480
+fun PravkaBottomBar(current: Tab, onSelect: (Tab) -> Unit) = BoxWithConstraints {
+    val wide = maxWidth >= 480.dp
     NavigationBar(containerColor = PravkaColors.Surface, tonalElevation = 0.dp) {
         Tab.entries.forEach { tab ->
             NavigationBarItem(

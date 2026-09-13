@@ -33,6 +33,8 @@ import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.Metric
 import ru.tsakunov.pravka.data.Repository
 import ru.tsakunov.pravka.data.Settings
+import ru.tsakunov.pravka.data.SyncManager
+import ru.tsakunov.pravka.data.SyncState
 import ru.tsakunov.pravka.data.WordItem
 import ru.tsakunov.pravka.data.WordList
 import ru.tsakunov.pravka.data.GrammarProgress
@@ -100,10 +102,22 @@ class AppViewModel(
     private val grammarBuilder: ClaudeGrammar,
     private val readingExtractor: ClaudeReading,
     private val readingJudge: ClaudeReadingJudge,
+    private val syncManager: SyncManager,
     api: ClaudeApi,
     batch: ClaudeBatch,
     sorter: ClaudeSorter,
 ) : ViewModel() {
+
+    // ---- Синхронизация через GitHub ----
+    val syncState: StateFlow<SyncState> = syncManager.state
+    fun syncNow() = syncManager.syncNow()
+    fun setSyncEnabled(on: Boolean) { settings.setSyncEnabled(on); if (on) syncManager.syncNow() }
+    fun setGithubToken(v: String) = settings.setGithubToken(v)
+
+    // ---- Экран ----
+    fun setReaderMode(on: Boolean) = settings.setReaderMode(on)
+    fun setUiScale(scale: Float) = settings.setUiScale(scale)
+    val isEink: Boolean get() = settings.isEink
 
     // ---- Журнал занятий (обучалка, училка, тренажёр) для общей статистики ----
     val activity = repo.observeActivity().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -441,7 +455,7 @@ class AppViewModel(
                     app.repository, app.settings, ClaudeVocabParser(app, api), Updater(app),
                     ClaudeStory(api), ClaudeJudge(api), ClaudeHomework(app, api),
                     ClaudeGrammar(app, api), ClaudeReading(app, api), ClaudeReadingJudge(api),
-                    api, ClaudeBatch(api), ClaudeSorter(app, api),
+                    app.sync, api, ClaudeBatch(api), ClaudeSorter(app, api),
                 ) as T
             }
     }

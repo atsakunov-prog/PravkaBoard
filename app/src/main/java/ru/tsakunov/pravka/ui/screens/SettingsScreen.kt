@@ -26,7 +26,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.tsakunov.pravka.BuildConfig
+import ru.tsakunov.pravka.api.GitHubStore
+import ru.tsakunov.pravka.api.Updater
+import ru.tsakunov.pravka.data.SettingsState
+import ru.tsakunov.pravka.data.SyncState
 import ru.tsakunov.pravka.ui.components.*
+import ru.tsakunov.pravka.ui.fmtDateTime
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import ru.tsakunov.pravka.ui.vm.UpdateState
@@ -36,6 +41,7 @@ import java.time.LocalDate
 fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     val settings by vm.settingsState.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
+    val sync by vm.syncState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val probe = remember { vm.speechInput(context) }
     var english by remember { mutableStateOf<EnglishSupport?>(null) }
@@ -47,6 +53,8 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     var model by remember(settings.model) { mutableStateOf(settings.model) }
     var showKey by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
+    var token by remember(settings.githubToken) { mutableStateOf(settings.githubToken) }
+    var showToken by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -87,6 +95,38 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            PravkaCard {
+                Text("Экран", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Режим ридера", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Для электронной книги: чёрный текст, яркие цвета, сплошные рамки, без узора на фоне, конфетти и плавных переходов." +
+                                if (vm.isEink) " На этом устройстве включён сам." else "",
+                            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
+                        )
+                    }
+                    Switch(checked = settings.readerMode, onCheckedChange = { vm.setReaderMode(it) })
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Размер интерфейса", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(6.dp))
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    SettingsState.UI_SCALES.forEachIndexed { i, scale ->
+                        SegmentedButton(
+                            selected = settings.uiScale == scale,
+                            onClick = { vm.setUiScale(scale) },
+                            shape = SegmentedButtonDefaults.itemShape(index = i, count = SettingsState.UI_SCALES.size),
+                        ) { Text("${(scale * 100).toInt()}%") }
+                    }
+                }
+                Text(
+                    "Крупнее всё разом: буквы, кнопки, отступы. На книжке по умолчанию 150%.",
+                    style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+
             PravkaCard {
                 Text("Claude", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))
@@ -186,6 +226,70 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(10.dp))
                 TextButton(onClick = { confirmReset = true }) { Text("Сбросить все данные", color = PravkaColors.Danger) }
+            }
+
+            PravkaCard {
+                Text("Синхронизация", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Через GitHub", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Телефон и книжка обмениваются одним файлом ${GitHubStore.FILE} в ветке ${GitHubStore.BRANCH} репозитория PravkaBoard: " +
+                                "уроки, тексты, правила, домашки и все результаты. Сверяется при запуске и при выходе из приложения.",
+                            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
+                        )
+                    }
+                    Switch(checked = settings.syncEnabled, onCheckedChange = { vm.setSyncEnabled(it) })
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text("Токен GitHub") },
+                    placeholder = { Text("github_pat_…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
+                    supportingText = { Text("Без токена приложение только принимает данные, отправлять не может") },
+                    trailingIcon = {
+                        IconButton(onClick = { showToken = !showToken }) {
+                            Icon(if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = null)
+                        }
+                    },
+                )
+                if (token != settings.githubToken) {
+                    Spacer(Modifier.height(8.dp))
+                    BigButton("Сохранить токен", onClick = { vm.setGithubToken(token); vm.showToast("Токен сохранён") })
+                }
+                Spacer(Modifier.height(10.dp))
+                when (val st = sync) {
+                    is SyncState.Running -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = PravkaColors.En)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Сверяю с GitHub…", color = PravkaColors.Ink2)
+                    }
+                    is SyncState.Error -> Text(st.message, color = PravkaColors.Danger)
+                    else -> if (settings.lastSyncAt > 0) Text(
+                        "Последняя синхронизация ${fmtDateTime(settings.lastSyncAt)}: ${settings.lastSyncNote}",
+                        color = if (settings.lastSyncOk) PravkaColors.GoodText else PravkaColors.Danger,
+                    ) else Text("Ещё не синхронизировалось", color = PravkaColors.Ink2)
+                }
+                Spacer(Modifier.height(8.dp))
+                SecondaryButton(
+                    "Синхронизировать сейчас",
+                    onClick = { vm.syncNow() },
+                    enabled = sync !is SyncState.Running,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Токен: github.com → Settings → Developer settings → Fine-grained tokens, репозиторий ${Updater.REPO}, право Contents: Read and write. " +
+                        "Один и тот же токен на телефоне и на книжке. Удалённое на одном устройстве удаляется и на другом; " +
+                        "правки одной записи с двух сторон решает более поздняя. Сброс данных копию на GitHub не трогает.",
+                    style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
+                )
             }
 
             PravkaCard {

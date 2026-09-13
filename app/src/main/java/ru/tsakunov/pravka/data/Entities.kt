@@ -21,6 +21,8 @@ data class WordList(
     @PrimaryKey val id: String,
     val title: String,
     val createdAt: Long,
+    /** Момент последней правки: при синхронизации остаётся более поздняя версия. 0 у записей до схемы 8. */
+    @ColumnInfo(defaultValue = "0") val updatedAt: Long = 0,
 )
 
 /** Пара «английское слово — русский перевод» внутри списка. */
@@ -44,6 +46,8 @@ data class WordItem(
     /** "word" или "phrase" */
     val kind: String,
     val position: Int,
+    /** Момент последней правки: при синхронизации остаётся более поздняя версия. 0 у записей до схемы 8. */
+    @ColumnInfo(defaultValue = "0") val updatedAt: Long = 0,
 )
 
 /** Одна попытка: Боря написал слово, мы засекли время. */
@@ -267,5 +271,29 @@ data class ActivityLog(
         const val KIND_LEARN = "learn"
         const val KIND_TEACH = "teach"
         const val KIND_GRAMMAR = "grammar"
+    }
+}
+
+/**
+ * Надгробие: запись удалили на этом устройстве. Уходит в синхронизацию, чтобы другое устройство тоже её
+ * удалило и не вернуло обратно. kind — вид записи (см. константы), id — её ключ; ключи везде UUID, поэтому
+ * одного столбца хватает. Дочерние записи (слова списка, проверки домашки) отдельных надгробий не получают:
+ * их удаляет каскад.
+ */
+@Entity(tableName = "tombstones")
+data class Tombstone(
+    @PrimaryKey val id: String,
+    val kind: String,
+    val ts: Long,
+) {
+    companion object {
+        const val LIST = "list"
+        const val ITEM = "item"
+        const val ATTEMPT = "attempt"
+        const val STORY = "story"
+        const val HOMEWORK = "homework"
+        const val GRAMMAR_SET = "grammar_set"
+        const val READING_TEXT = "reading_text"
+        const val READING_RUN = "reading_run"
     }
 }

@@ -61,6 +61,9 @@ interface WordListDao {
     @Query("SELECT * FROM word_items ORDER BY position ASC")
     suspend fun allItems(): List<WordItem>
 
+    @Query("DELETE FROM word_items WHERE id = :id")
+    suspend fun deleteItemById(id: String)
+
     @Query("SELECT * FROM word_lists ORDER BY createdAt DESC")
     suspend fun allLists(): List<WordList>
 
@@ -78,6 +81,9 @@ interface AttemptDao {
 
     @Query("SELECT COUNT(*) FROM attempts")
     suspend fun count(): Int
+
+    @Query("SELECT id FROM attempts")
+    suspend fun allIds(): List<String>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(attempt: Attempt)
@@ -105,6 +111,12 @@ interface StoryDao {
 
     @Query("DELETE FROM stories WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("SELECT * FROM stories ORDER BY createdAt ASC")
+    suspend fun all(): List<Story>
+
+    @Query("SELECT id FROM stories")
+    suspend fun allIds(): List<String>
 }
 
 @Dao
@@ -117,6 +129,15 @@ interface QuizRunDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(run: QuizRun)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(runs: List<QuizRun>)
+
+    @Query("SELECT * FROM quiz_runs ORDER BY ts ASC")
+    suspend fun all(): List<QuizRun>
+
+    @Query("SELECT id FROM quiz_runs")
+    suspend fun allIds(): List<String>
 }
 
 @Dao
@@ -129,6 +150,16 @@ interface HomeworkDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(homework: Homework)
+
+    /** Для слияния: REPLACE удалил бы строку и каскадом все её проверки. */
+    @Update
+    suspend fun update(homework: Homework)
+
+    @Query("SELECT * FROM homeworks WHERE id = :id")
+    suspend fun get(id: String): Homework?
+
+    @Query("SELECT * FROM homeworks ORDER BY createdAt ASC")
+    suspend fun all(): List<Homework>
 
     @Query("UPDATE homeworks SET updatedAt = :ts WHERE id = :id")
     suspend fun touch(id: String, ts: Long)
@@ -147,6 +178,15 @@ interface HomeworkDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCheck(check: HomeworkCheck)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChecks(checks: List<HomeworkCheck>)
+
+    @Query("SELECT * FROM homework_checks ORDER BY ts ASC")
+    suspend fun allChecks(): List<HomeworkCheck>
+
+    @Query("SELECT id FROM homework_checks")
+    suspend fun allCheckIds(): List<String>
 }
 
 @Dao
@@ -159,6 +199,12 @@ interface GrammarDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSet(set: GrammarSet)
+
+    @Query("SELECT * FROM grammar_sets ORDER BY createdAt ASC")
+    suspend fun allSets(): List<GrammarSet>
+
+    @Query("SELECT id FROM grammar_sets")
+    suspend fun allSetIds(): List<String>
 
     @Query("DELETE FROM grammar_sets WHERE id = :id")
     suspend fun deleteSet(id: String)
@@ -174,6 +220,9 @@ interface GrammarDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertProgress(progress: GrammarProgress)
+
+    @Query("SELECT * FROM grammar_progress")
+    suspend fun allProgress(): List<GrammarProgress>
 }
 
 @Dao
@@ -187,6 +236,12 @@ interface ReadingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertText(text: ReadingText)
 
+    @Query("SELECT * FROM reading_texts ORDER BY createdAt ASC")
+    suspend fun allTexts(): List<ReadingText>
+
+    @Query("SELECT id FROM reading_texts")
+    suspend fun allTextIds(): List<String>
+
     @Query("DELETE FROM reading_texts WHERE id = :id")
     suspend fun deleteText(id: String)
 
@@ -195,6 +250,15 @@ interface ReadingDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRun(run: ReadingRun)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRuns(runs: List<ReadingRun>)
+
+    @Query("SELECT * FROM reading_runs ORDER BY ts ASC")
+    suspend fun allRuns(): List<ReadingRun>
+
+    @Query("SELECT id FROM reading_runs")
+    suspend fun allRunIds(): List<String>
 
     @Query("DELETE FROM reading_runs WHERE id = :id")
     suspend fun deleteRun(id: String)
@@ -240,4 +304,25 @@ interface ActivityDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: ActivityLog)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(logs: List<ActivityLog>)
+
+    @Query("SELECT * FROM activity_log ORDER BY ts ASC")
+    suspend fun all(): List<ActivityLog>
+
+    @Query("SELECT id FROM activity_log")
+    suspend fun allIds(): List<String>
+}
+
+@Dao
+interface TombstoneDao {
+    @Query("SELECT * FROM tombstones")
+    suspend fun all(): List<Tombstone>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(tombstone: Tombstone)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(tombstones: List<Tombstone>)
 }

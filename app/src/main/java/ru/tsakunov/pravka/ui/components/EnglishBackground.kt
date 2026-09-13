@@ -35,9 +35,15 @@ import kotlin.random.Random
  * Фон всего приложения: тёплый белый лист, а по нему еле заметный английский узор —
  * прописные буквы, короткие слова и лондонские мелочи (чайная чашка, зонт, автобус, замок).
  * Всё серым на пять процентов: угадывается, но не мешает читать плашки поверх.
+ * pattern = false (режим ридера): только чистый лист. На E-Ink пятипроцентный серый либо пропадает,
+ * либо превращается в шум, а перерисовка узора при каждом обновлении экрана оставляет следы.
  */
 @Composable
-fun EnglishBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+fun EnglishBackground(modifier: Modifier = Modifier, pattern: Boolean = true, content: @Composable BoxScope.() -> Unit) {
+    if (!pattern) {
+        Box(modifier.fillMaxSize().background(PravkaColors.PageBase), content = content)
+        return
+    }
     val measurer = rememberTextMeasurer()
     val icons = listOf(
         rememberVectorPainter(Icons.Filled.EmojiFoodBeverage),
