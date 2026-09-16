@@ -400,12 +400,20 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
 @Composable
 private fun CursiveFontRow(lang: Lang, sample: String, fonts: CursiveFontFiles, onPick: () -> Unit, onReset: () -> Unit) {
     val custom = fonts.forLang(lang)
+    val context = LocalContext.current
+    val bundledOk = remember(lang) { bundledFontLoads(context, lang) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         LangTag(lang)
         Spacer(Modifier.width(10.dp))
         Text(
             if (custom != null) "Свой файл шрифта" else "Встроенный: ${CursiveFonts.bundledName(lang)}",
             style = MaterialTheme.typography.bodyMedium, color = PravkaColors.Ink2,
+        )
+    }
+    if (custom == null && !bundledOk) {
+        Text(
+            "Этот Android не смог прочитать встроенный шрифт, пропись показывается обычными буквами. Подложи свой файл .ttf.",
+            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Danger, modifier = Modifier.padding(top = 4.dp),
         )
     }
     Text(

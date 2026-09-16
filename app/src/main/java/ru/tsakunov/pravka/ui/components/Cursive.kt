@@ -10,6 +10,8 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
+import androidx.core.content.res.ResourcesCompat
+import android.content.Context
 import ru.tsakunov.pravka.R
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.ui.theme.PravkaColors
@@ -38,7 +40,15 @@ object CursiveFonts {
 
     fun bundled(lang: Lang): FontFamily = if (lang == Lang.EN) En else Ru
     fun bundledName(lang: Lang): String = if (lang == Lang.EN) EN_NAME else RU_NAME
+    fun bundledResId(lang: Lang): Int = if (lang == Lang.EN) R.font.playwrite_us_trad else R.font.propisi
 }
+
+/**
+ * Проверка для экрана настроек: читает ли этот Android встроенный файл шрифта. Старые конвертированные TTF
+ * системный загрузчик иногда отвергает молча, и текст тихо уходит в обычный шрифт; здесь это видно словами.
+ */
+fun bundledFontLoads(context: Context, lang: Lang): Boolean =
+    runCatching { ResourcesCompat.getFont(context, CursiveFonts.bundledResId(lang)) != null }.getOrDefault(false)
 
 /** Шрифт прописи для языка: свой файл, если он есть, иначе встроенный. Новый экземпляр Font на каждую версию: замена подхватывается сразу. */
 @Composable

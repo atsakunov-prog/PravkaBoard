@@ -33,8 +33,8 @@ class TasksTest {
 
     private val today: (Long) -> Boolean = { it >= 1000 }
 
-    /** Все задания написаны по одному разу (первый круг закрыт). */
-    private fun firstPassDone() = tasksOf(items).map { done(it.item.id, it.lang) }
+    /** Все задания написаны по одному разу. */
+    private fun onceEach() = tasksOf(items).map { done(it.item.id, it.lang) }
 
     @Test
     fun tasks_englishFirstThenRussian_skippingBlanks_withHelpers() {
@@ -45,51 +45,43 @@ class TasksTest {
     }
 
     @Test
-    fun next_staysInSameLanguage() {
-        val attempts = listOf(done("a", Lang.EN))
-        assertEquals(Task(items[1], Lang.EN), nextTask(items, attempts, "a", Lang.EN, today))
-    }
-
-    @Test
-    fun next_wrapsWithinLanguageBeforeSwitching() {
-        // Написаны a и c по-английски, b — нет: после c возвращаемся к b, а не идём в русский.
-        val attempts = listOf(done("a", Lang.EN), done("c", Lang.EN))
-        assertEquals(Task(items[1], Lang.EN), nextTask(items, attempts, "c", Lang.EN, today))
-    }
-
-    @Test
-    fun next_switchesLanguageWhenCurrentColumnIsFinished() {
-        val attempts = listOf(done("a", Lang.EN), done("b", Lang.EN), done("c", Lang.EN))
-        assertEquals(Task(items[0], Lang.RU), nextTask(items, attempts, "c", Lang.EN, today))
-        // Из русского в английский тоже: русские написаны, английские нет.
+    fun next_followsTheColumn_thenSwitchesLanguage() {
+        assertEquals(Task(items[1], Lang.EN), nextTask(items, listOf(done("a", Lang.EN)), "a", Lang.EN, today))
+        // После последнего английского — первое русское, а не первое английское по кругу.
+        val en = listOf(done("a", Lang.EN), done("b", Lang.EN), done("c", Lang.EN))
+        assertEquals(Task(items[0], Lang.RU), nextTask(items, en, "c", Lang.EN, today))
+        // И обратно: после последнего русского лента заворачивается на первое английское.
         val ru = listOf(done("a", Lang.RU), done("b", Lang.RU), done("d", Lang.RU))
         assertEquals(Task(items[0], Lang.EN), nextTask(items, ru, "d", Lang.RU, today))
     }
 
     @Test
-    fun next_secondPassStartsFromTopOfEnglishAfterFirstPass() {
-        // Первый круг закрыт последним русским словом: второй круг начинается с первого английского.
-        assertEquals(Task(items[0], Lang.EN), nextTask(items, firstPassDone(), "d", Lang.RU, today))
-        // Внутри второго круга — тот же порядок: после a идёт b.
-        val attempts = firstPassDone() + done("a", Lang.EN, 2000)
-        assertEquals(Task(items[1], Lang.EN), nextTask(items, attempts, "a", Lang.EN, today))
+    fun next_skippedWordComesAroundWithTheTape() {
+        // b пропустили: после c идёт русский столбик, b дождётся своего места на следующем витке.
+        val attempts = listOf(done("a", Lang.EN), done("c", Lang.EN))
+        assertEquals(Task(items[0], Lang.RU), nextTask(items, attempts, "c", Lang.EN, today))
+        val ru = attempts + listOf(done("a", Lang.RU), done("b", Lang.RU), done("d", Lang.RU))
+        assertEquals(Task(items[0], Lang.EN), nextTask(items, ru, "d", Lang.RU, today))
+        assertEquals(Task(items[1], Lang.EN), nextTask(items, ru + done("a", Lang.EN, 2000), "a", Lang.EN, today))
     }
 
     @Test
-    fun next_secondPassSwitchesToRussianThenEnds() {
-        val enTwice = firstPassDone() + listOf(done("a", Lang.EN, 2000), done("b", Lang.EN, 2000), done("c", Lang.EN, 2000))
-        assertEquals(Task(items[0], Lang.RU), nextTask(items, enTwice, "c", Lang.EN, today))
-        val all = enTwice + listOf(done("a", Lang.RU, 2000), done("b", Lang.RU, 2000), done("d", Lang.RU, 2000))
-        assertNull(nextTask(items, all, "d", Lang.RU, today))
-        // Третий раз вручную не открывает третий круг.
-        assertNull(nextTask(items, all + done("a", Lang.EN, 3000), "a", Lang.EN, today))
+    fun next_secondTimeAroundIsRecall_andEndsAfterTwice() {
+        // Всё написано по разу: «Дальше» после последнего русского ведёт к первому английскому, уже по памяти.
+        val next = nextTask(items, onceEach(), "d", Lang.RU, today)
+        assertEquals(Task(items[0], Lang.EN), next)
+        assertEquals(1, attemptsToday(onceEach(), next!!, today))
+        val twice = onceEach() + tasksOf(items).map { done(it.item.id, it.lang, 2000) }
+        assertNull(nextTask(items, twice, "d", Lang.RU, today))
+        // Слово, написанное вручную в третий раз, ленту не оживляет.
+        assertNull(nextTask(items, twice + done("a", Lang.EN, 3000), "a", Lang.EN, today))
     }
 
     @Test
-    fun next_leftoverFromFirstPassComesBeforeSecondPass() {
-        // Слово b пропущено в первом круге, остальное написано: сначала b, а не второй круг.
-        val attempts = firstPassDone().filter { it.itemId != "b" || it.lang != Lang.EN.code }
-        assertEquals(Task(items[1], Lang.EN), nextTask(items, attempts, "d", Lang.RU, today))
+    fun next_skipsWordsAlreadyWrittenTwice() {
+        val attempts = onceEach() + listOf(done("b", Lang.EN, 2000), done("c", Lang.EN, 2000))
+        // После a (написано раз) идут b и c, но они уже дважды: следующее — русское a.
+        assertEquals(Task(items[0], Lang.RU), nextTask(items, attempts, "a", Lang.EN, today))
     }
 
     @Test
@@ -97,11 +89,13 @@ class TasksTest {
         assertEquals(Task(items[0], Lang.EN), nextTask(items, emptyList(), null, Lang.EN, today))
         val yesterday = tasksOf(items).map { done(it.item.id, it.lang, ts = 5) }
         assertEquals(Task(items[0], Lang.EN), nextTask(items, yesterday, null, Lang.EN, today))
+        assertEquals(0, attemptsToday(yesterday, Task(items[0], Lang.EN), today))
     }
 
     @Test
-    fun next_currentItemDeleted_startsFromBeginningOfSameLanguage() {
+    fun next_currentItemDeleted_startsFromBeginning() {
         assertEquals(Task(items[0], Lang.EN), nextTask(items, emptyList(), "gone", Lang.EN, today))
+        assertNull(nextTask(emptyList(), emptyList(), null, Lang.EN, today))
     }
 
     @Test

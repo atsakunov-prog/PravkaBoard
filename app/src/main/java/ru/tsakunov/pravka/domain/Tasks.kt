@@ -5,9 +5,9 @@ import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
 
 /**
- * Сколько кругов гармошки за день. Как на бумаге: первый круг — списывание (столбик английских, рядом столбик
- * русских, оба слова видны), второй — по памяти (столбик с оригиналом заворачивается, видна только подсказка на
- * другом языке, слово открывается по нажатию для проверки).
+ * Сколько раз слово пишется за день, прежде чем «Дальше» начнёт его пропускать. Как на бумаге: первый раз —
+ * списывание (оба слова видны), второй — по памяти (видна только подсказка на другом языке, слово открывается по
+ * нажатию для проверки). Режим решается по каждому слову отдельно: уже написанное сегодня идёт по памяти.
  */
 const val ACCORDION_PASSES = 2
 
@@ -30,16 +30,16 @@ fun tasksOf(items: List<WordItem>): List<Task> =
 fun doneToday(attempts: List<Attempt>, task: Task, today: (Long) -> Boolean = ::isToday): Attempt? =
     attempts.filter { it.itemId == task.item.id && it.lang == task.lang.code && today(it.ts) }.maxByOrNull { it.ts }
 
-/** Сколько раз задание написано сегодня: 0 — ещё не писал, 1 — идёт второй круг (по памяти). */
+/** Сколько раз задание написано сегодня: 0 — ещё не писал (списывание), от 1 — уже писал (по памяти). */
 fun attemptsToday(attempts: List<Attempt>, task: Task, today: (Long) -> Boolean = ::isToday): Int =
     attempts.count { it.itemId == task.item.id && it.lang == task.lang.code && today(it.ts) }
 
 /**
- * Куда вести кнопка «Дальше». Круги идут по порядку, столбики внутри круга — английский, потом русский. Пока
- * столбик не закончен, продолжаем его: недописанные слова текущего языка после текущего слова, потом с начала
- * столбика, затем другой язык; когда круг закрыт, следующий начинается с первого английского слова, пока не
- * пройдено passes кругов. null — всё написано. itemId == null — начать с начала (кнопка на экране списка);
- * если текущего задания в списке уже нет (слово удалили), поиск идёт с начала столбика.
+ * Куда вести кнопка «Дальше». Задания идут одной лентой, как столбики гармошки: все английские, потом все
+ * русские, потом снова с начала. Берётся следующее за текущим слово, которое сегодня написано меньше passes раз;
+ * списывание это или по памяти, решает само слово (см. attemptsToday). null — каждое слово написано passes раз.
+ * itemId == null — с начала ленты (кнопка на экране списка); если текущего задания уже нет (слово удалили),
+ * поиск тоже идёт с начала.
  */
 fun nextTask(
     items: List<WordItem>,
@@ -50,21 +50,9 @@ fun nextTask(
     passes: Int = ACCORDION_PASSES,
 ): Task? {
     val tasks = tasksOf(items)
-    val current = tasks.firstOrNull { it.item.id == itemId && it.lang == lang }
-    // Продолжать после текущего слова имеет смысл только в круге, который оно только что закрыло;
-    // следующий круг начинается с начала столбика.
-    val justClosed = current?.let { attemptsToday(attempts, it, today) - 1 } ?: -1
-    for (pass in 0 until passes) {
-        // Свой столбик первым только в круге, который ещё дописывается; остальные круги идут в порядке гармошки.
-        val langs = if (pass == justClosed) listOf(lang, lang.other()) else listOf(Lang.EN, Lang.RU)
-        for (l in langs) {
-            val column = tasks.filter { it.lang == l }
-            val idx = if (l == lang && pass == justClosed) column.indexOfFirst { it.item.id == itemId } else -1
-            val ordered = if (idx >= 0) column.drop(idx + 1) + column.take(idx + 1) else column
-            ordered.firstOrNull { attemptsToday(attempts, it, today) <= pass }?.let { return it }
-        }
-    }
-    return null
+    val idx = tasks.indexOfFirst { it.item.id == itemId && it.lang == lang }
+    val ordered = if (idx >= 0) tasks.drop(idx + 1) + tasks.take(idx + 1) else tasks
+    return ordered.firstOrNull { attemptsToday(attempts, it, today) < passes }
 }
 
 /**

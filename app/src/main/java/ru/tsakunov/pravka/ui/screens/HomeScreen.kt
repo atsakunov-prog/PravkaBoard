@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.tsakunov.pravka.data.WordListWithCount
-import ru.tsakunov.pravka.domain.ACCORDION_PASSES
 import ru.tsakunov.pravka.domain.isToday
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.fmtDate
@@ -92,9 +91,9 @@ fun HomeScreen(
             }
 
             items(lists, key = { it.id }) { list ->
-                // Два круга гармошки: за день каждое слово пишется дважды на каждом языке.
-                val total = list.taskCount * ACCORDION_PASSES
-                val doneToday = attempts.count { it.listId == list.id && isToday(it.ts) && it.itemId != null }.coerceAtMost(total)
+                val doneToday = attempts.filter { it.listId == list.id && isToday(it.ts) && it.itemId != null }
+                    .map { it.itemId to it.lang }.toSet().size
+                val total = list.taskCount
                 ListRow(
                     list = list,
                     doneToday = doneToday,

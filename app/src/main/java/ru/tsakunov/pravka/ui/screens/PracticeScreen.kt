@@ -87,8 +87,9 @@ fun PracticeScreen(
     var elapsed by remember(itemId, lang) { mutableLongStateOf(0L) }
     var confetti by remember { mutableIntStateOf(0) }
 
-    // Круг гармошки: 0 — списывание, оба слова видны; дальше — по памяти, слово под плашкой, видна подсказка.
-    // Круг фиксируется до СТОПа: после записи счётчик вырастет, а экран не должен перескочить в другой режим.
+    // Режим по слову: ещё не писал сегодня — списывание, оба слова видны; уже писал (зелёное в списке) — по памяти,
+    // слово под плашкой, видна подсказка. Фиксируется до СТОПа: после записи счётчик вырастет, а экран не должен
+    // перескочить в другой режим.
     val todayCount = task?.let { attemptsToday(attempts, it) } ?: 0
     var pass by remember(itemId, lang) { mutableIntStateOf(todayCount) }
     LaunchedEffect(todayCount) { if (phase is Phase.Ready) pass = todayCount }
@@ -160,7 +161,7 @@ fun PracticeScreen(
             ) {
                 Spacer(Modifier.height(8.dp))
                 if (recall && !revealed) {
-                    // Второй круг: как завёрнутый столбик гармошки. Видна подсказка, слово под плашкой:
+                    // По памяти: как завёрнутый столбик гармошки. Видна подсказка, слово под плашкой:
                     // Боря переводит вслух, нажимает и проверяет себя.
                     HelperWord(helper, lang.other(), big = true)
                     Spacer(Modifier.height(14.dp))

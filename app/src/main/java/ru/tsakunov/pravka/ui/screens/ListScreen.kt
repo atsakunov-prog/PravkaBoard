@@ -35,7 +35,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
-import ru.tsakunov.pravka.domain.ACCORDION_PASSES
 import ru.tsakunov.pravka.domain.Task
 import ru.tsakunov.pravka.domain.attemptsForWord
 import ru.tsakunov.pravka.domain.attemptsToday
@@ -74,9 +73,9 @@ fun ListScreen(
 
     val tasks = remember(items) { tasksOf(items) }
     val todayHere = remember(attempts, listId) { attempts.filter { it.listId == listId && isToday(it.ts) } }
-    // Следующее задание с начала гармошки: недописанные слова первого круга, потом второй круг по памяти.
+    // Следующее задание с начала ленты: первое слово, написанное сегодня меньше двух раз.
     val next = remember(items, attempts) { nextTask(items, attempts, null, Lang.EN) }
-    val nextPass = next?.let { attemptsToday(attempts, it) } ?: 0
+    val doneDistinct = remember(todayHere) { todayHere.map { it.itemId to it.lang }.toSet().size }
     val repeats = remember(attempts, items) { repeatRowsForList(attempts, listId, items) }
 
     // Перетаскивание за ручку: пока палец на строке, порядок живёт здесь и уходит в базу только при отпускании.
@@ -130,7 +129,7 @@ fun ListScreen(
                         val spl = todayHere.sumOf { it.ms } / 1000.0 / letters
                         Text("Сегодня по этому списку", style = MaterialTheme.typography.labelMedium, color = PravkaColors.Muted)
                         Text(
-                            "${wordsWord(todayHere.size)} из ${tasks.size * ACCORDION_PASSES} · ${lettersWord(letters)} · ${fmtNum(spl)} с/букву",
+                            "${wordsWord(doneDistinct)} из ${tasks.size} · ${lettersWord(letters)} · ${fmtNum(spl)} с/букву",
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Spacer(Modifier.height(10.dp))
@@ -142,13 +141,13 @@ fun ListScreen(
                             container = PravkaColors.Good,
                         )
                         Text(
-                            if (nextPass >= 1) "Второй круг, по памяти: видна подсказка, слово под плашкой. Или нажми на любое слово ниже"
-                            else "Первый круг, списывание. Или нажми на любое слово ниже",
+                            if (todayHere.isEmpty()) "Или нажми на любое слово ниже"
+                            else "Зелёное слово идёт по памяти: подсказка и плашка. Или нажми на любое слово ниже",
                             style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 6.dp).align(Alignment.CenterHorizontally),
                         )
                     } else if (tasks.isNotEmpty()) {
-                        Text("Оба круга написаны сегодня. Молодец, Боря!", style = MaterialTheme.typography.titleMedium, color = PravkaColors.GoodText)
+                        Text("Все слова написаны сегодня дважды. Молодец, Боря!", style = MaterialTheme.typography.titleMedium, color = PravkaColors.GoodText)
                         Text("Можно повторить любое слово, нажав на него.", style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted)
                     } else {
                         Text("В списке пока нет слов. Добавь через плюс сверху.", color = PravkaColors.Muted)
