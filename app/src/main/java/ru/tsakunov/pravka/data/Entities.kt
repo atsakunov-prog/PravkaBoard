@@ -10,6 +10,9 @@ import androidx.room.PrimaryKey
 enum class Lang(val code: String) {
     EN("en"), RU("ru");
 
+    /** Другой язык пары: перевод для английского слова и наоборот. */
+    fun other(): Lang = if (this == EN) RU else EN
+
     companion object {
         fun of(code: String?): Lang = entries.firstOrNull { it.code == code } ?: EN
     }

@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -34,11 +35,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
+import ru.tsakunov.pravka.domain.ACCORDION_PASSES
 import ru.tsakunov.pravka.domain.Task
 import ru.tsakunov.pravka.domain.attemptsForWord
+import ru.tsakunov.pravka.domain.attemptsToday
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.doneToday
 import ru.tsakunov.pravka.domain.isToday
+import ru.tsakunov.pravka.domain.nextTask
 import ru.tsakunov.pravka.domain.repeatRowsForList
 import ru.tsakunov.pravka.domain.repeatSummary
 import ru.tsakunov.pravka.domain.tasksOf
@@ -70,7 +74,9 @@ fun ListScreen(
 
     val tasks = remember(items) { tasksOf(items) }
     val todayHere = remember(attempts, listId) { attempts.filter { it.listId == listId && isToday(it.ts) } }
-    val firstUndone = tasks.firstOrNull { doneToday(attempts, it) == null }
+    // Следующее задание с начала гармошки: недописанные слова первого круга, потом второй круг по памяти.
+    val next = remember(items, attempts) { nextTask(items, attempts, null, Lang.EN) }
+    val nextPass = next?.let { attemptsToday(attempts, it) } ?: 0
     val repeats = remember(attempts, items) { repeatRowsForList(attempts, listId, items) }
 
     // Перетаскивание за ручку: пока палец на строке, порядок живёт здесь и уходит в базу только при отпускании.
@@ -124,24 +130,25 @@ fun ListScreen(
                         val spl = todayHere.sumOf { it.ms } / 1000.0 / letters
                         Text("Сегодня по этому списку", style = MaterialTheme.typography.labelMedium, color = PravkaColors.Muted)
                         Text(
-                            "${wordsWord(todayHere.size)} из ${tasks.size} · ${lettersWord(letters)} · ${fmtNum(spl)} с/букву",
+                            "${wordsWord(todayHere.size)} из ${tasks.size * ACCORDION_PASSES} · ${lettersWord(letters)} · ${fmtNum(spl)} с/букву",
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Spacer(Modifier.height(10.dp))
                     }
-                    if (firstUndone != null) {
+                    if (next != null) {
                         BigButton(
                             if (todayHere.isEmpty()) "Начать писать" else "Продолжить",
-                            onClick = { onPractice(firstUndone.item.id, firstUndone.lang) },
+                            onClick = { onPractice(next.item.id, next.lang) },
                             container = PravkaColors.Good,
                         )
                         Text(
-                            "Или нажми на любое слово ниже",
-                            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
+                            if (nextPass >= 1) "Второй круг, по памяти: видна подсказка, слово под плашкой. Или нажми на любое слово ниже"
+                            else "Первый круг, списывание. Или нажми на любое слово ниже",
+                            style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 6.dp).align(Alignment.CenterHorizontally),
                         )
                     } else if (tasks.isNotEmpty()) {
-                        Text("Все слова написаны сегодня. Молодец, Боря!", style = MaterialTheme.typography.titleMedium, color = PravkaColors.GoodText)
+                        Text("Оба круга написаны сегодня. Молодец, Боря!", style = MaterialTheme.typography.titleMedium, color = PravkaColors.GoodText)
                         Text("Можно повторить любое слово, нажав на него.", style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted)
                     } else {
                         Text("В списке пока нет слов. Добавь через плюс сверху.", color = PravkaColors.Muted)
@@ -308,12 +315,14 @@ private fun WordRow(
             WordChip(
                 text = item.en, lang = Lang.EN,
                 done = if (item.en.isNotBlank()) doneToday(attempts, Task(item, Lang.EN)) else null,
+                count = attemptsToday(attempts, Task(item, Lang.EN)),
                 history = if (item.en.isNotBlank()) attemptsForWord(attempts, Lang.EN, item.en) else emptyList(),
                 modifier = Modifier.weight(1f), onClick = { onPractice(Lang.EN) },
             )
             WordChip(
                 text = item.ru, lang = Lang.RU,
                 done = if (item.ru.isNotBlank()) doneToday(attempts, Task(item, Lang.RU)) else null,
+                count = attemptsToday(attempts, Task(item, Lang.RU)),
                 history = if (item.ru.isNotBlank()) attemptsForWord(attempts, Lang.RU, item.ru) else emptyList(),
                 modifier = Modifier.weight(1f), onClick = { onPractice(Lang.RU) },
             )
@@ -333,7 +342,7 @@ private fun WordRow(
 }
 
 @Composable
-private fun WordChip(text: String, lang: Lang, done: Attempt?, history: List<Attempt>, modifier: Modifier, onClick: () -> Unit) {
+private fun WordChip(text: String, lang: Lang, done: Attempt?, count: Int, history: List<Attempt>, modifier: Modifier, onClick: () -> Unit) {
     val enabled = text.isNotBlank()
     Surface(
         modifier = modifier.heightIn(min = 60.dp).clickable(enabled = enabled, onClick = onClick),
@@ -353,7 +362,8 @@ private fun WordChip(text: String, lang: Lang, done: Attempt?, history: List<Att
                 val best = history.minByOrNull { it.ms }
                 Text(
                     when {
-                        done != null -> "✓ ${fmtTime(done.ms)} · ${fmtNum(done.secPerLetter)} с/б"
+                        // Галочка на каждый круг: ✓ списано, ✓✓ написано и по памяти.
+                        done != null -> "${"✓".repeat(count.coerceIn(1, 3))} ${fmtTime(done.ms)} · ${fmtNum(done.secPerLetter)} с/б"
                         best != null -> "${lettersWord(countLetters(text))} · лучшее ${fmtTime(best.ms)} · ${plural(history.size, "раз", "раза", "раз")}"
                         else -> lettersWord(countLetters(text))
                     },

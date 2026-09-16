@@ -26,14 +26,15 @@ data class CursiveFontFiles(val en: File? = null, val ru: File? = null, val vers
 /**
  * Прописные начертания для Гармошки: как слово пишется в тетради, со всеми соединениями.
  * Английский — Playwrite US Trad (школьный курсив в духе Zaner-Bloser, лицензия OFL, текст в assets/licenses).
- * Для русского школьной прописи со свободной лицензией не нашлось; встроен Marck Script (OFL) — ближайший
- * связный рукописный, а точную пропись (например, Propisi от ParaType) можно подложить файлом в настройках.
+ * Русский — Propisi (ParaGraph, 1997): настоящая школьная пропись, вшита по решению Саши для домашнего
+ * пользования; латиницы в файле нет, поэтому шрифт только для русских слов. Любой из двух можно заменить
+ * своим файлом в настройках.
  */
 object CursiveFonts {
     val En: FontFamily = FontFamily(Font(R.font.playwrite_us_trad))
-    val Ru: FontFamily = FontFamily(Font(R.font.marck_script))
+    val Ru: FontFamily = FontFamily(Font(R.font.propisi))
     const val EN_NAME = "Playwrite US Trad"
-    const val RU_NAME = "Marck Script"
+    const val RU_NAME = "Propisi"
 
     fun bundled(lang: Lang): FontFamily = if (lang == Lang.EN) En else Ru
     fun bundledName(lang: Lang): String = if (lang == Lang.EN) EN_NAME else RU_NAME
@@ -48,16 +49,20 @@ fun cursiveFamily(lang: Lang, fonts: CursiveFontFiles): FontFamily {
     }
 }
 
-/** Слово прописью под печатным. Размер по длине, как у печатного, но меньше: у прописи высокие петли и хвосты. */
+/**
+ * Слово прописью под печатным. Размер по длине, как у печатного, но меньше: у прописи высокие петли и хвосты.
+ * У Propisi мелкие строчные буквы, поэтому русский идёт крупнее на пятую часть.
+ */
 @Composable
 fun CursiveWord(text: String, lang: Lang, fonts: CursiveFontFiles, modifier: Modifier = Modifier) {
-    val size = when {
+    val base = when {
         text.length <= 5 -> 56.sp
         text.length <= 8 -> 44.sp
         text.length <= 14 -> 34.sp
         text.length <= 24 -> 26.sp
         else -> 22.sp
     }
+    val size = if (lang == Lang.RU) base * 1.2f else base
     Text(
         text,
         style = TextStyle(fontFamily = cursiveFamily(lang, fonts), fontSize = size, lineHeight = size * 1.6, color = PravkaColors.Ink),

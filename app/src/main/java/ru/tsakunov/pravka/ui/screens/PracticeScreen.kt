@@ -12,6 +12,7 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,8 +37,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
+import ru.tsakunov.pravka.domain.Task
 import ru.tsakunov.pravka.domain.Verdict
 import ru.tsakunov.pravka.domain.VerdictKind
+import ru.tsakunov.pravka.domain.attemptsToday
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.evaluate
 import ru.tsakunov.pravka.domain.nextTask
@@ -74,12 +78,22 @@ fun PracticeScreen(
     val scope = rememberCoroutineScope()
 
     val item = items.firstOrNull { it.id == itemId }
-    val text = item?.let { if (lang == Lang.EN) it.en else it.ru } ?: ""
+    val task = item?.let { Task(it, lang) }
+    val text = task?.text ?: ""
+    val helper = task?.helper ?: ""
     val letters = countLetters(text)
 
     var phase by remember(itemId, lang) { mutableStateOf<Phase>(Phase.Ready) }
     var elapsed by remember(itemId, lang) { mutableLongStateOf(0L) }
     var confetti by remember { mutableIntStateOf(0) }
+
+    // Круг гармошки: 0 — списывание, оба слова видны; дальше — по памяти, слово под плашкой, видна подсказка.
+    // Круг фиксируется до СТОПа: после записи счётчик вырастет, а экран не должен перескочить в другой режим.
+    val todayCount = task?.let { attemptsToday(attempts, it) } ?: 0
+    var pass by remember(itemId, lang) { mutableIntStateOf(todayCount) }
+    LaunchedEffect(todayCount) { if (phase is Phase.Ready) pass = todayCount }
+    val recall = pass >= 1 && helper.isNotBlank()
+    var revealed by remember(itemId, lang) { mutableStateOf(false) }
 
     // Тик таймера
     val running = phase as? Phase.Running
@@ -145,10 +159,20 @@ fun PracticeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(8.dp))
-                WordDisplay(text)
-                // Как это пишется в тетради: прописью, со всеми соединениями.
-                if (text.isNotBlank()) CursiveWord(text, lang, cursive, Modifier.padding(bottom = 6.dp))
-                Text(lettersWord(letters), color = PravkaColors.Muted, style = MaterialTheme.typography.bodyMedium)
+                if (recall && !revealed) {
+                    // Второй круг: как завёрнутый столбик гармошки. Видна подсказка, слово под плашкой:
+                    // Боря переводит вслух, нажимает и проверяет себя.
+                    HelperWord(helper, lang.other(), big = true)
+                    Spacer(Modifier.height(14.dp))
+                    CoverPlate(lang) { revealed = true }
+                } else {
+                    WordDisplay(text)
+                    // Как это пишется в тетради: прописью, со всеми соединениями.
+                    if (text.isNotBlank()) CursiveWord(text, lang, cursive, Modifier.padding(bottom = 4.dp))
+                    // Перевод мелкими буквами: иначе слово просто переписывается, не связываясь со смыслом.
+                    if (helper.isNotBlank()) HelperWord(helper, lang.other(), big = false)
+                    Text(lettersWord(letters), color = PravkaColors.Muted, style = MaterialTheme.typography.bodyMedium)
+                }
                 Spacer(Modifier.height(6.dp))
                 if (langStats.n > 0) {
                     Text(
@@ -174,7 +198,8 @@ fun PracticeScreen(
                         )
                         Spacer(Modifier.weight(1f))
                         when (p) {
-                            is Phase.Ready -> HugeButton("СТАРТ", PravkaColors.Good, enabled = item != null && letters > 0) {
+                            // По памяти СТАРТ ждёт, пока слово открыто: сначала перевод вслух, потом ручка.
+                            is Phase.Ready -> HugeButton("СТАРТ", PravkaColors.Good, enabled = item != null && letters > 0 && (!recall || revealed)) {
                                 elapsed = 0
                                 phase = Phase.Running(SystemClock.elapsedRealtime())
                             }
@@ -221,6 +246,51 @@ private fun WordDisplay(text: String) {
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
     )
+}
+
+/** Слово на другом языке: крупно, когда это единственная подсказка, мелко под словом в круге списывания. */
+@Composable
+private fun HelperWord(text: String, lang: Lang, big: Boolean) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        LangTag(lang, big = big)
+        Spacer(Modifier.height(if (big) 10.dp else 4.dp))
+        val size = when {
+            !big -> if (text.length > 14) 20.sp else 26.sp
+            text.length <= 8 -> 48.sp
+            text.length <= 14 -> 36.sp
+            else -> 28.sp
+        }
+        Text(
+            text,
+            style = TextStyle(
+                fontSize = size, lineHeight = size * 1.15,
+                fontWeight = if (big) FontWeight.ExtraBold else FontWeight.SemiBold,
+                color = if (big) PravkaColors.Ink else PravkaColors.Ink2,
+            ),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** Плашка на месте слова во втором круге: нажатие открывает слово для проверки. */
+@Composable
+private fun CoverPlate(lang: Lang, onOpen: () -> Unit) {
+    Surface(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = lang.softColor(),
+        border = BorderStroke(2.dp, lang.color()),
+    ) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(Icons.Filled.VisibilityOff, contentDescription = null, tint = lang.textColor(), modifier = Modifier.size(32.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (lang == Lang.EN) "Скажи по-английски, потом нажми и проверь" else "Скажи по-русски, потом нажми и проверь",
+                color = lang.textColor(), fontWeight = FontWeight.Bold, fontSize = 18.sp, textAlign = TextAlign.Center,
+            )
+        }
+    }
 }
 
 @Composable

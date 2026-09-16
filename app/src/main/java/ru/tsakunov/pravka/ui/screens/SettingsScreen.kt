@@ -154,8 +154,8 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Под печатным словом показано, как оно пишется в тетради, со всеми соединениями. Английский — школьный курсив " +
-                        "${CursiveFonts.EN_NAME}. Для русского школьной прописи со свободной лицензией нет, встроен ${CursiveFonts.RU_NAME}; " +
-                        "точную пропись (например, Propisi от ParaType) можно подложить файлом .ttf, отдельно на телефоне и на книжке.",
+                        "${CursiveFonts.EN_NAME}, русский — школьная пропись ${CursiveFonts.RU_NAME}. Любой из них можно заменить " +
+                        "своим файлом .ttf, отдельно на телефоне и на книжке.",
                     style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
                 )
                 Spacer(Modifier.height(10.dp))
