@@ -396,8 +396,8 @@ class AppViewModel(
         val e = _undoStack.value.lastOrNull { it.listId == listId } ?: return
         _undoStack.update { it - e }
         viewModelScope.launch {
-            e.undo()
-            showToast(ToastMessage("Отменено: ${e.label}", "Вернуть") { viewModelScope.launch { e.redo(); pushUndo(e) } })
+            if (!attempt(e.undo, "Не получилось отменить")) return@launch
+            showToast(ToastMessage("Отменено: ${e.label}", "Вернуть") { viewModelScope.launch { if (attempt(e.redo, "Не получилось вернуть")) pushUndo(e) } })
         }
     }
 
@@ -405,15 +405,27 @@ class AppViewModel(
     private fun undoEntry(e: UndoEntry) {
         if (e !in _undoStack.value) return // уже откатили стрелкой
         _undoStack.update { it - e }
-        viewModelScope.launch { e.undo() }
+        viewModelScope.launch { attempt(e.undo, "Не получилось вернуть") }
     }
+
+    /** Откат может упереться в базу (список уже удалили, пришла синхронизация): не падаем, а говорим словами. */
+    private suspend fun attempt(action: suspend () -> Unit, failure: String): Boolean =
+        runCatching { action() }.onFailure { showToast("$failure: ${it.message ?: it.javaClass.simpleName}") }.isSuccess
+
+    /** Удалённый список забирает с собой и свои отменяемые действия. */
+    private fun forgetUndoForList(listId: String) = _undoStack.update { it.filter { x -> x.listId != listId } }
 
     // ---- Шрифты прописи в Гармошке ----
     private val _cursiveFonts = MutableStateFlow(readCursiveFonts())
     /** Свои файлы шрифтов прописи (null — встроенный шрифт). */
     val cursiveFonts: StateFlow<CursiveFontFiles> = _cursiveFonts
     private fun cursiveFile(lang: Lang) = File(fontsDir, "cursive_${lang.code}.ttf")
-    private fun readCursiveFonts() = CursiveFontFiles(en = cursiveFile(Lang.EN).takeIf { it.isFile }, ru = cursiveFile(Lang.RU).takeIf { it.isFile })
+    /** version — время файлов: замена шрифта по тому же пути иначе не отличалась бы от прежнего состояния. */
+    private fun readCursiveFonts(): CursiveFontFiles {
+        val en = cursiveFile(Lang.EN).takeIf { it.isFile }
+        val ru = cursiveFile(Lang.RU).takeIf { it.isFile }
+        return CursiveFontFiles(en = en, ru = ru, version = (en?.lastModified() ?: 0L) + (ru?.lastModified() ?: 0L))
+    }
 
     /** Ставит свой шрифт прописи из содержимого файла; false — Android не прочитал его как шрифт, ничего не меняется. */
     suspend fun installCursiveFont(lang: Lang, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
@@ -486,7 +498,7 @@ class AppViewModel(
     }
 
     fun renameList(id: String, title: String) = viewModelScope.launch { repo.renameList(id, title) }
-    fun deleteList(id: String) = viewModelScope.launch { repo.deleteList(id) }
+    fun deleteList(id: String) = viewModelScope.launch { repo.deleteList(id); forgetUndoForList(id) }
     fun addItem(listId: String, en: String, ru: String) = viewModelScope.launch { repo.addItem(listId, en, ru) }
 
     fun updateItem(item: WordItem, en: String, ru: String) = viewModelScope.launch {
@@ -503,22 +515,30 @@ class AppViewModel(
     /** Удаляет сразу, без вопроса: слово возвращается кнопкой «Вернуть» в подсказке или стрелкой отмены на экране списка. */
     fun deleteItem(item: WordItem) = viewModelScope.launch {
         repo.deleteItem(item)
-        val e = UndoEntry("item:${item.id}", item.listId, "удаление «${item.label}»", undo = { repo.restoreItem(item) }, redo = { repo.deleteItem(item) })
+        val e = UndoEntry(
+            "item:${item.id}", item.listId, "удаление «${item.label}»",
+            undo = { if (!repo.restoreItem(item)) error("список уже удалён") }, redo = { repo.deleteItem(item) },
+        )
         pushUndo(e)
         showToast(ToastMessage("Слово «${item.label}» удалено", "Вернуть") { undoEntry(e) })
     }
 
-    /** Новый порядок слов после перетаскивания; movedId — какое слово тянули, для подписи отмены. */
+    /**
+     * Новый порядок слов после перетаскивания; movedId — какое слово тянули, для подписи отмены. Несколько
+     * перестановок подряд складываются в одну запись стека: отмена возвращает порядок до первой из них.
+     */
     fun reorderItems(listId: String, orderedIds: List<String>, movedId: String?) = viewModelScope.launch {
         val before = repo.getItems(listId)
         val beforeIds = before.map { it.id }
         if (beforeIds == orderedIds) return@launch
         repo.reorderItems(listId, orderedIds)
+        val key = "order:$listId"
+        val previous = _undoStack.value.lastOrNull { it.key == key }
         val label = before.firstOrNull { it.id == movedId }?.label ?: "слова"
         pushUndo(
             UndoEntry(
-                "order:$listId", listId, "перемещение «$label»",
-                undo = { repo.reorderItems(listId, beforeIds) }, redo = { repo.reorderItems(listId, orderedIds) },
+                key, listId, "перемещение «$label»",
+                undo = previous?.undo ?: { repo.reorderItems(listId, beforeIds) }, redo = { repo.reorderItems(listId, orderedIds) },
             ),
         )
     }

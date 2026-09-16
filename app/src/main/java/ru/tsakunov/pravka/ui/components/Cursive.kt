@@ -15,8 +15,11 @@ import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import java.io.File
 
-/** Свои файлы шрифтов прописи, положенные через настройки; null — встроенный шрифт. */
-data class CursiveFontFiles(val en: File? = null, val ru: File? = null) {
+/**
+ * Свои файлы шрифтов прописи, положенные через настройки; null — встроенный шрифт. version меняется при любой
+ * замене файла: по ней экраны понимают, что шрифт надо перечитать, не трогая диск при каждой перекомпозиции.
+ */
+data class CursiveFontFiles(val en: File? = null, val ru: File? = null, val version: Long = 0L) {
     fun forLang(lang: Lang): File? = if (lang == Lang.EN) en else ru
 }
 
@@ -36,19 +39,18 @@ object CursiveFonts {
     fun bundledName(lang: Lang): String = if (lang == Lang.EN) EN_NAME else RU_NAME
 }
 
-/** Шрифт прописи для языка: свой файл, если он есть, иначе встроенный. Ключ по времени файла: замена подхватывается сразу. */
+/** Шрифт прописи для языка: свой файл, если он есть, иначе встроенный. Новый экземпляр Font на каждую версию: замена подхватывается сразу. */
 @Composable
-fun cursiveFamily(lang: Lang, custom: File?): FontFamily {
-    val path = custom?.path
-    val stamp = custom?.lastModified() ?: 0L
-    return remember(lang, path, stamp) {
-        custom?.takeIf { it.isFile }?.let { FontFamily(Font(it)) } ?: CursiveFonts.bundled(lang)
+fun cursiveFamily(lang: Lang, fonts: CursiveFontFiles): FontFamily {
+    val custom = fonts.forLang(lang)
+    return remember(lang, custom?.path, fonts.version) {
+        custom?.let { FontFamily(Font(it)) } ?: CursiveFonts.bundled(lang)
     }
 }
 
 /** Слово прописью под печатным. Размер по длине, как у печатного, но меньше: у прописи высокие петли и хвосты. */
 @Composable
-fun CursiveWord(text: String, lang: Lang, custom: File?, modifier: Modifier = Modifier) {
+fun CursiveWord(text: String, lang: Lang, fonts: CursiveFontFiles, modifier: Modifier = Modifier) {
     val size = when {
         text.length <= 5 -> 56.sp
         text.length <= 8 -> 44.sp
@@ -58,7 +60,7 @@ fun CursiveWord(text: String, lang: Lang, custom: File?, modifier: Modifier = Mo
     }
     Text(
         text,
-        style = TextStyle(fontFamily = cursiveFamily(lang, custom), fontSize = size, lineHeight = size * 1.6, color = PravkaColors.Ink),
+        style = TextStyle(fontFamily = cursiveFamily(lang, fonts), fontSize = size, lineHeight = size * 1.6, color = PravkaColors.Ink),
         textAlign = TextAlign.Center,
         modifier = modifier.fillMaxWidth(),
     )

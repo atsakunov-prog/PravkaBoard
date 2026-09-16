@@ -37,10 +37,11 @@ interface WordListDao {
     @Query("DELETE FROM word_lists WHERE id = :id")
     suspend fun deleteList(id: String)
 
-    @Query("SELECT * FROM word_items WHERE listId = :listId ORDER BY position ASC")
+    // Второй ключ id: после слияния перестановок с двух устройств позиции могут совпасть, а порядок должен быть одинаковым везде.
+    @Query("SELECT * FROM word_items WHERE listId = :listId ORDER BY position ASC, id ASC")
     fun observeItems(listId: String): Flow<List<WordItem>>
 
-    @Query("SELECT * FROM word_items WHERE listId = :listId ORDER BY position ASC")
+    @Query("SELECT * FROM word_items WHERE listId = :listId ORDER BY position ASC, id ASC")
     suspend fun getItems(listId: String): List<WordItem>
 
     @Query("SELECT * FROM word_items WHERE id = :id")
@@ -61,7 +62,7 @@ interface WordListDao {
     @Delete
     suspend fun deleteItem(item: WordItem)
 
-    @Query("SELECT * FROM word_items ORDER BY position ASC")
+    @Query("SELECT * FROM word_items ORDER BY position ASC, id ASC")
     suspend fun allItems(): List<WordItem>
 
     @Query("DELETE FROM word_items WHERE id = :id")
@@ -329,7 +330,6 @@ interface TombstoneDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(tombstones: List<Tombstone>)
 
-    /** Снимает надгробие с записи, которую вернули к жизни («Вернуть» после удаления). */
-    @Query("DELETE FROM tombstones WHERE id = :id")
-    suspend fun delete(id: String)
+    @Query("SELECT * FROM tombstones WHERE id = :id")
+    suspend fun get(id: String): Tombstone?
 }

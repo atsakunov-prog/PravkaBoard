@@ -8,7 +8,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -76,9 +76,15 @@ fun ListScreen(
     // Перетаскивание за ручку: пока палец на строке, порядок живёт здесь и уходит в базу только при отпускании.
     val listState = rememberLazyListState()
     val drag = remember(listId) { DragReorder(listState) }
+    // Обработчик жеста в pointerInput запускается один раз и не видит новых items: свежий список берётся отсюда.
+    SideEffect { drag.latest = items }
     val shown = drag.order ?: items
     // Room отдал новый порядок (или список изменился иначе): локальная копия больше не нужна.
     LaunchedEffect(items) { if (drag.key == null) drag.order = null }
+    fun dropDragged(movedId: String) {
+        val ids = drag.finish() ?: return
+        if (ids != items.map { it.id }) vm.reorderItems(listId, ids, movedId) else drag.order = null
+    }
 
     Scaffold(
         containerColor = PravkaColors.Page,
@@ -157,9 +163,8 @@ fun ListScreen(
                 }
             }
 
-            items(shown, key = { it.id }) { item ->
+            itemsIndexed(shown, key = { _, it -> it.id }) { index, item ->
                 val dragging = drag.key == item.id
-                val index = shown.indexOfFirst { it.id == item.id }
                 WordRow(
                     item = item,
                     attempts = attempts,
@@ -173,14 +178,14 @@ fun ListScreen(
                     },
                     handle = Modifier.pointerInput(item.id) {
                         detectDragGestures(
-                            onDragStart = { drag.start(item.id, items) },
+                            onDragStart = { drag.start(item.id) },
                             onDrag = { change, amount -> change.consume(); drag.move(amount.y) },
-                            onDragEnd = { drag.finish()?.let { vm.reorderItems(listId, it, item.id) } },
-                            onDragCancel = { drag.finish()?.let { vm.reorderItems(listId, it, item.id) } },
+                            onDragEnd = { dropDragged(item.id) },
+                            onDragCancel = { drag.cancel() },
                         )
                     },
                     canMoveUp = index > 0,
-                    canMoveDown = index >= 0 && index < shown.lastIndex,
+                    canMoveDown = index < shown.lastIndex,
                     onPractice = { lang -> onPractice(item.id, lang) },
                     onEdit = { editing = item },
                     onDelete = { vm.deleteItem(item) },
@@ -221,26 +226,35 @@ fun ListScreen(
 private class DragReorder(private val listState: LazyListState) {
     var key by mutableStateOf<String?>(null)
     var order by mutableStateOf<List<WordItem>?>(null)
+    /** Актуальный список из Room; обновляется из композиции, потому что жест его иначе не увидит. */
+    var latest: List<WordItem> = emptyList()
     private var top by mutableFloatStateOf(0f)
 
     private fun info(k: Any?) = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == k }
 
-    fun start(k: String, items: List<WordItem>) {
+    fun start(k: String) {
         key = k
-        order = items
+        order = order ?: latest
         top = info(k)?.offset?.toFloat() ?: 0f
     }
 
+    /**
+     * Меняемся местами с соседом, когда середина строки под пальцем прошла его середину в направлении движения:
+     * так строки разной высоты (перевод в две строки) не дёргаются туда-обратно.
+     */
     fun move(dy: Float) {
         val k = key ?: return
         top += dy
+        if (dy == 0f) return
         val me = info(k) ?: return
         val cur = order ?: return
         val center = top + me.size / 2f
         val ids = cur.map { it.id }.toHashSet()
         val target = listState.layoutInfo.visibleItemsInfo.firstOrNull {
             val id = it.key as? String
-            id != null && id != k && id in ids && center >= it.offset && center < it.offset + it.size
+            val mid = it.offset + it.size / 2f
+            id != null && id != k && id in ids && center >= it.offset && center < it.offset + it.size &&
+                (if (dy > 0) center >= mid else center <= mid)
         } ?: return
         val from = cur.indexOfFirst { it.id == k }
         val to = cur.indexOfFirst { it.id == target.key }
@@ -256,6 +270,12 @@ private class DragReorder(private val listState: LazyListState) {
         val cur = order
         key = null
         return cur?.map { it.id }
+    }
+
+    /** Жест прервали (звонок, уход с экрана): строки возвращаются, как были. */
+    fun cancel() {
+        key = null
+        order = null
     }
 }
 
@@ -281,7 +301,8 @@ private fun WordRow(
         shadowElevation = if (dragging && !PravkaColors.reader) 6.dp else 0.dp,
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(handle.width(28.dp).heightIn(min = 60.dp), contentAlignment = Alignment.Center) {
+            // Ручка широкая: за неё тянет и детская рука.
+            Box(handle.width(44.dp).heightIn(min = 60.dp), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.DragHandle, contentDescription = "Перетащить", tint = PravkaColors.Muted)
             }
             WordChip(

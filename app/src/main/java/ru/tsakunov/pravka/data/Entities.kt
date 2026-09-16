@@ -292,11 +292,15 @@ data class Tombstone(
     companion object {
         const val LIST = "list"
         const val ITEM = "item"
+        /** Возврат удалённого слова: запись с id restoredId(itemId), время новее могилы отменяет её. */
+        const val ITEM_RESTORED = "item_restored"
         const val ATTEMPT = "attempt"
         const val STORY = "story"
         const val HOMEWORK = "homework"
         const val GRAMMAR_SET = "grammar_set"
         const val READING_TEXT = "reading_text"
         const val READING_RUN = "reading_run"
+
+        fun restoredId(itemId: String) = "restored:$itemId"
     }
 }

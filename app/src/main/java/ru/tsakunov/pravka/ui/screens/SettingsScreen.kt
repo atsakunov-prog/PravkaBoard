@@ -38,7 +38,6 @@ import ru.tsakunov.pravka.ui.fmtDateTime
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import ru.tsakunov.pravka.ui.vm.UpdateState
-import java.io.File
 import java.time.LocalDate
 
 @Composable
@@ -160,11 +159,11 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
                 )
                 Spacer(Modifier.height(10.dp))
-                CursiveFontRow(Lang.EN, "a hen · to plant", cursive.en, onPick = { pickFont(Lang.EN) }, onReset = { vm.removeCursiveFont(Lang.EN) })
+                CursiveFontRow(Lang.EN, "a hen · to plant", cursive, onPick = { pickFont(Lang.EN) }, onReset = { vm.removeCursiveFont(Lang.EN) })
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(color = PravkaColors.Grid)
                 Spacer(Modifier.height(10.dp))
-                CursiveFontRow(Lang.RU, "курица · пшеница", cursive.ru, onPick = { pickFont(Lang.RU) }, onReset = { vm.removeCursiveFont(Lang.RU) })
+                CursiveFontRow(Lang.RU, "курица · пшеница", cursive, onPick = { pickFont(Lang.RU) }, onReset = { vm.removeCursiveFont(Lang.RU) })
             }
 
             PravkaCard {
@@ -399,7 +398,8 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
 
 /** Строка настройки шрифта прописи: образец в текущем шрифте, откуда он взят и кнопки «Выбрать файл» / «Встроенный». */
 @Composable
-private fun CursiveFontRow(lang: Lang, sample: String, custom: File?, onPick: () -> Unit, onReset: () -> Unit) {
+private fun CursiveFontRow(lang: Lang, sample: String, fonts: CursiveFontFiles, onPick: () -> Unit, onReset: () -> Unit) {
+    val custom = fonts.forLang(lang)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         LangTag(lang)
         Spacer(Modifier.width(10.dp))
@@ -410,7 +410,7 @@ private fun CursiveFontRow(lang: Lang, sample: String, custom: File?, onPick: ()
     }
     Text(
         sample,
-        style = TextStyle(fontFamily = cursiveFamily(lang, custom), fontSize = 34.sp, lineHeight = 54.sp, color = PravkaColors.Ink),
+        style = TextStyle(fontFamily = cursiveFamily(lang, fonts), fontSize = 34.sp, lineHeight = 54.sp, color = PravkaColors.Ink),
         modifier = Modifier.padding(top = 4.dp),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

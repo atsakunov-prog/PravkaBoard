@@ -147,7 +147,7 @@ fun PracticeScreen(
                 Spacer(Modifier.height(8.dp))
                 WordDisplay(text)
                 // Как это пишется в тетради: прописью, со всеми соединениями.
-                if (text.isNotBlank()) CursiveWord(text, lang, cursive.forLang(lang), Modifier.padding(bottom = 6.dp))
+                if (text.isNotBlank()) CursiveWord(text, lang, cursive, Modifier.padding(bottom = 6.dp))
                 Text(lettersWord(letters), color = PravkaColors.Muted, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(6.dp))
                 if (langStats.n > 0) {

@@ -8,6 +8,8 @@ import ru.tsakunov.pravka.domain.HomeworkResult
 import ru.tsakunov.pravka.domain.ReadingDetail
 import ru.tsakunov.pravka.domain.Snapshot
 import ru.tsakunov.pravka.domain.countWords
+import ru.tsakunov.pravka.domain.itemAlive
+import ru.tsakunov.pravka.domain.newerGraves
 import ru.tsakunov.pravka.domain.reorder
 import java.util.UUID
 
@@ -78,27 +80,31 @@ class Repository(
     }
 
     /** Меняет только текст слова у текущей строки: позиция могла сдвинуться после того, как экран взял копию. */
-    suspend fun updateItem(id: String, en: String, ru: String): WordItem? {
-        val cur = lists.getItem(id) ?: return null
+    suspend fun updateItem(id: String, en: String, ru: String): WordItem? = db.withTransaction {
+        val cur = lists.getItem(id) ?: return@withTransaction null
         val updated = cur.copy(en = en.trim(), ru = ru.trim(), updatedAt = System.currentTimeMillis())
         lists.updateItem(updated)
-        return updated
+        updated
     }
 
     suspend fun deleteItem(item: WordItem) = db.withTransaction { lists.deleteItem(item); bury(Tombstone.ITEM, item.id) }
 
     /**
      * Возвращает удалённое слово («Вернуть» после удаления). Идентификатор прежний, чтобы попытки по нему не
-     * осиротели; updatedAt свежий и потому новее надгробия: по правилу слияния такая запись побеждает могилу
-     * и на другом устройстве, если надгробие уже успело туда уйти.
+     * осиротели. Могила остаётся, а рядом ложится запись ITEM_RESTORED с более поздним временем: она уходит по
+     * синхронизации вместе со словом и отменяет могилу на другом устройстве. false — списка уже нет, возвращать некуда.
      */
-    suspend fun restoreItem(item: WordItem) = db.withTransaction {
-        lists.insertItems(listOf(item.copy(updatedAt = System.currentTimeMillis())))
-        tombstones.delete(item.id)
+    suspend fun restoreItem(item: WordItem): Boolean = db.withTransaction {
+        if (lists.getList(item.listId) == null) return@withTransaction false
+        val now = System.currentTimeMillis()
+        val grave = tombstones.get(item.id)
+        lists.insertItems(listOf(item.copy(updatedAt = now)))
+        tombstones.insert(Tombstone(id = Tombstone.restoredId(item.id), kind = Tombstone.ITEM_RESTORED, ts = maxOf(now, (grave?.ts ?: 0L) + 1)))
+        true
     }
 
     /** Переставляет слова списка в порядке orderedIds; пишутся только строки, чья позиция изменилась. */
-    suspend fun reorderItems(listId: String, orderedIds: List<String>) {
+    suspend fun reorderItems(listId: String, orderedIds: List<String>) = db.withTransaction {
         val ordered = reorder(lists.getItems(listId), orderedIds) { it.id }
         val now = System.currentTimeMillis()
         val changed = ordered.mapIndexedNotNull { i, it -> if (it.position != i) it.copy(position = i, updatedAt = now) else null }
@@ -262,9 +268,9 @@ class Repository(
 
     /**
      * Слияние слепка с местной базой. Правила:
-     * - надгробия применяются первыми: что удалили на другом устройстве, удаляется и здесь и больше не принимается;
-     *   исключение — слово с updatedAt новее надгробия: его вернули кнопкой «Вернуть» после удаления, оно живёт,
-     *   а надгробие снимается;
+     * - надгробия сливаются по времени и применяются первыми: что удалили на другом устройстве, удаляется и здесь
+     *   и больше не принимается; слово живо, только если рядом с могилой лежит более поздняя запись ITEM_RESTORED
+     *   (кнопка «Вернуть»), время правки самого слова роли не играет;
      * - списки, слова, домашки и прогресс по правилам берутся более поздние по updatedAt; при равном времени и разном
      *   содержимом побеждает чужая версия (иначе две копии со старыми записями без updatedAt расходились бы навсегда
      *   и пересылали файл друг другу при каждом проходе), при одинаковом содержимом ничего не пишется;
@@ -276,11 +282,12 @@ class Repository(
      */
     suspend fun importSnapshot(s: Snapshot): Int = db.withTransaction {
         var changed = 0
-        val known = tombstones.all().map { it.id }.toHashSet()
-        val incomingGraves = s.tombstones.filter { it.id !in known }
-        incomingGraves.forEach { if (applyTombstone(it)) changed++ }
+        val local = tombstones.all().associateBy { it.id }
+        val incomingGraves = newerGraves(local, s.tombstones)
         tombstones.insertAll(incomingGraves)
-        val dead = known + s.tombstones.map { it.id }
+        val graves = local + incomingGraves.associateBy { it.id }
+        incomingGraves.forEach { if (applyTombstone(it, graves)) changed++ }
+        val dead = graves.keys
 
         val listIds = lists.allLists().map { it.id }.toHashSet()
         for (l in s.lists) {
@@ -291,13 +298,11 @@ class Repository(
                 l.newerThan(existing.updatedAt, existing) -> { lists.updateList(l); changed++ }
             }
         }
-        val graveTs = (tombstones.all()).associate { it.id to it.ts }
-        val newItems = s.items.filter { it.listId in listIds && it.outlivesGrave(graveTs[it.id]) }.filter { i ->
+        val newItems = s.items.filter { it.listId in listIds && itemAlive(it.id, graves) }.filter { i ->
             val existing = lists.getItem(i.id)
             existing == null || i.newerThan(existing.updatedAt, existing)
         }
         lists.insertItems(newItems)
-        newItems.forEach { if (it.id in graveTs) tombstones.delete(it.id) }
         changed += newItems.size
 
         changed += insertMissing(attempts.allIds(), s.attempts.filter { it.id !in dead }, { it.id }) { attempts.insertAll(it) }
@@ -344,8 +349,6 @@ class Repository(
     /** Чужая запись побеждает, если она новее или ровесница с другим содержимым; одинаковую не трогаем. */
     private fun WordList.newerThan(existingUpdatedAt: Long, existing: WordList) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
     private fun WordItem.newerThan(existingUpdatedAt: Long, existing: WordItem) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
-    /** Без могилы слово живо; с могилой — только если его правили (вернули) уже после удаления. */
-    private fun WordItem.outlivesGrave(graveTs: Long?) = graveTs == null || updatedAt > graveTs
     private fun Homework.newerThan(existingUpdatedAt: Long, existing: Homework) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
     private fun GrammarProgress.newerThan(existingUpdatedAt: Long, existing: GrammarProgress) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
 
@@ -356,11 +359,13 @@ class Repository(
         return fresh.size
     }
 
-    /** Удаление по надгробию с другого устройства; true, если что-то удалилось. */
-    private suspend fun applyTombstone(t: Tombstone): Boolean = when (t.kind) {
+    /** Удаление по надгробию с другого устройства; true, если что-то удалилось. graves — все надгробия после слияния. */
+    private suspend fun applyTombstone(t: Tombstone, graves: Map<String, Tombstone>): Boolean = when (t.kind) {
         Tombstone.LIST -> lists.getList(t.id)?.let { lists.deleteList(t.id); true } ?: false
-        // Слово, возвращённое после удаления, новее надгробия и остаётся жить.
-        Tombstone.ITEM -> lists.getItem(t.id)?.takeIf { it.updatedAt <= t.ts }?.let { lists.deleteItemById(t.id); true } ?: false
+        // Слово, возвращённое после удаления (ITEM_RESTORED новее могилы), остаётся жить.
+        Tombstone.ITEM -> if (itemAlive(t.id, graves)) false else lists.getItem(t.id)?.let { lists.deleteItemById(t.id); true } ?: false
+        // Само слово приедет вместе со слепком; здесь только запись о возврате.
+        Tombstone.ITEM_RESTORED -> false
         Tombstone.ATTEMPT -> { attempts.delete(t.id); true }
         Tombstone.STORY -> { reading.deleteRunsForText(t.id); stories.deleteById(t.id); true }
         Tombstone.HOMEWORK -> homeworks.get(t.id)?.let { homeworks.delete(t.id); true } ?: false
