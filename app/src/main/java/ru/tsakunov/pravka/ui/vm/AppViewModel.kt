@@ -1,5 +1,6 @@
 package ru.tsakunov.pravka.ui.vm
 
+import android.graphics.Typeface
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -8,9 +9,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ru.tsakunov.pravka.PravkaApp
 import ru.tsakunov.pravka.api.ClaudeApi
 import ru.tsakunov.pravka.api.ClaudeBatch
@@ -45,7 +49,10 @@ import ru.tsakunov.pravka.domain.ReadingDetail
 import ru.tsakunov.pravka.domain.SentenceResult
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.countWords
+import ru.tsakunov.pravka.domain.movedIds
+import ru.tsakunov.pravka.ui.components.CursiveFontFiles
 import ru.tsakunov.pravka.ui.components.SpeechInput
+import ru.tsakunov.pravka.ui.fmtTime
 
 sealed interface UpdateState {
     data object Idle : UpdateState
@@ -91,6 +98,22 @@ sealed interface ParseState {
     data class Done(val list: WordList) : ParseState
 }
 
+/** Подсказка внизу экрана; с actionLabel справа появляется кнопка (например, «Вернуть»). */
+data class ToastMessage(val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
+
+/**
+ * Отменяемое действие в списке слов: удаление, правка, перемещение слова, записанный результат письма.
+ * key называет тронутую запись, чтобы новое действие над ней заменяло прежнюю запись стека; label — то, что
+ * подставляется после «Отменено:».
+ */
+class UndoEntry(
+    val key: String,
+    val listId: String,
+    val label: String,
+    val undo: suspend () -> Unit,
+    val redo: suspend () -> Unit,
+)
+
 class AppViewModel(
     private val repo: Repository,
     private val settings: Settings,
@@ -103,6 +126,8 @@ class AppViewModel(
     private val readingExtractor: ClaudeReading,
     private val readingJudge: ClaudeReadingJudge,
     private val syncManager: SyncManager,
+    /** Каталог своих шрифтов прописи (filesDir/fonts); между устройствами они не ходят. */
+    private val fontsDir: File,
     api: ClaudeApi,
     batch: ClaudeBatch,
     sorter: ClaudeSorter,
@@ -351,10 +376,66 @@ class AppViewModel(
     private val _parse = MutableStateFlow<ParseState>(ParseState.Idle)
     val parse: StateFlow<ParseState> = _parse
 
-    private val _toast = MutableStateFlow<String?>(null)
-    val toast: StateFlow<String?> = _toast
+    private val _toast = MutableStateFlow<ToastMessage?>(null)
+    val toast: StateFlow<ToastMessage?> = _toast
     fun toastShown() { _toast.value = null }
-    fun showToast(msg: String) { _toast.value = msg }
+    fun showToast(msg: String) = showToast(ToastMessage(msg))
+    fun showToast(t: ToastMessage) { _toast.value = t }
+
+    // ---- Отмена действий в списках слов ----
+    private val _undoStack = MutableStateFlow<List<UndoEntry>>(emptyList())
+    /** Последние отменяемые действия; экран берёт последнее по своему listId. Живёт, пока живёт ViewModel. */
+    val undoStack: StateFlow<List<UndoEntry>> = _undoStack
+
+    /** Повторное действие над той же записью заменяет её прежнюю запись стека; глубина ограничена. */
+    private fun pushUndo(e: UndoEntry) = _undoStack.update { (it.filter { x -> x.key != e.key } + e).takeLast(UNDO_DEPTH) }
+    private fun forgetUndo(key: String) = _undoStack.update { it.filter { x -> x.key != key } }
+
+    /** Стрелка отмены на экранах списка и тренировки: откатывает последнее действие в этом списке и предлагает вернуть его. */
+    fun undoLast(listId: String) {
+        val e = _undoStack.value.lastOrNull { it.listId == listId } ?: return
+        _undoStack.update { it - e }
+        viewModelScope.launch {
+            e.undo()
+            showToast(ToastMessage("Отменено: ${e.label}", "Вернуть") { viewModelScope.launch { e.redo(); pushUndo(e) } })
+        }
+    }
+
+    /** «Вернуть» в подсказке сразу после действия: откат без встречного предложения. */
+    private fun undoEntry(e: UndoEntry) {
+        if (e !in _undoStack.value) return // уже откатили стрелкой
+        _undoStack.update { it - e }
+        viewModelScope.launch { e.undo() }
+    }
+
+    // ---- Шрифты прописи в Гармошке ----
+    private val _cursiveFonts = MutableStateFlow(readCursiveFonts())
+    /** Свои файлы шрифтов прописи (null — встроенный шрифт). */
+    val cursiveFonts: StateFlow<CursiveFontFiles> = _cursiveFonts
+    private fun cursiveFile(lang: Lang) = File(fontsDir, "cursive_${lang.code}.ttf")
+    private fun readCursiveFonts() = CursiveFontFiles(en = cursiveFile(Lang.EN).takeIf { it.isFile }, ru = cursiveFile(Lang.RU).takeIf { it.isFile })
+
+    /** Ставит свой шрифт прописи из содержимого файла; false — Android не прочитал его как шрифт, ничего не меняется. */
+    suspend fun installCursiveFont(lang: Lang, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        fontsDir.mkdirs()
+        val tmp = File(fontsDir, "cursive_${lang.code}.tmp")
+        tmp.writeBytes(bytes)
+        val ok = runCatching { Typeface.Builder(tmp).build() != null }.getOrDefault(false)
+        if (ok) {
+            val target = cursiveFile(lang)
+            target.delete()
+            tmp.renameTo(target)
+        } else {
+            tmp.delete()
+        }
+        _cursiveFonts.value = readCursiveFonts()
+        ok
+    }
+
+    fun removeCursiveFont(lang: Lang) {
+        cursiveFile(lang).delete()
+        _cursiveFonts.value = readCursiveFonts()
+    }
 
     // Потоки по идентификатору кэшируются: collectAsStateWithLifecycle пересобирается при смене
     // экземпляра Flow, а Repository возвращал бы новый на каждую перекомпозицию.
@@ -407,16 +488,65 @@ class AppViewModel(
     fun renameList(id: String, title: String) = viewModelScope.launch { repo.renameList(id, title) }
     fun deleteList(id: String) = viewModelScope.launch { repo.deleteList(id) }
     fun addItem(listId: String, en: String, ru: String) = viewModelScope.launch { repo.addItem(listId, en, ru) }
-    fun updateItem(item: WordItem, en: String, ru: String) = viewModelScope.launch { repo.updateItem(item, en, ru) }
-    fun deleteItem(item: WordItem) = viewModelScope.launch { repo.deleteItem(item) }
+
+    fun updateItem(item: WordItem, en: String, ru: String) = viewModelScope.launch {
+        val updated = repo.updateItem(item.id, en, ru) ?: return@launch
+        if (updated.en == item.en && updated.ru == item.ru) return@launch
+        pushUndo(
+            UndoEntry(
+                "item:${item.id}", item.listId, "правка «${updated.label}»",
+                undo = { repo.updateItem(item.id, item.en, item.ru) }, redo = { repo.updateItem(item.id, updated.en, updated.ru) },
+            ),
+        )
+    }
+
+    /** Удаляет сразу, без вопроса: слово возвращается кнопкой «Вернуть» в подсказке или стрелкой отмены на экране списка. */
+    fun deleteItem(item: WordItem) = viewModelScope.launch {
+        repo.deleteItem(item)
+        val e = UndoEntry("item:${item.id}", item.listId, "удаление «${item.label}»", undo = { repo.restoreItem(item) }, redo = { repo.deleteItem(item) })
+        pushUndo(e)
+        showToast(ToastMessage("Слово «${item.label}» удалено", "Вернуть") { undoEntry(e) })
+    }
+
+    /** Новый порядок слов после перетаскивания; movedId — какое слово тянули, для подписи отмены. */
+    fun reorderItems(listId: String, orderedIds: List<String>, movedId: String?) = viewModelScope.launch {
+        val before = repo.getItems(listId)
+        val beforeIds = before.map { it.id }
+        if (beforeIds == orderedIds) return@launch
+        repo.reorderItems(listId, orderedIds)
+        val label = before.firstOrNull { it.id == movedId }?.label ?: "слова"
+        pushUndo(
+            UndoEntry(
+                "order:$listId", listId, "перемещение «$label»",
+                undo = { repo.reorderItems(listId, beforeIds) }, redo = { repo.reorderItems(listId, orderedIds) },
+            ),
+        )
+    }
+
+    /** Сдвиг слова из меню строки: −1 выше, +1 ниже. */
+    fun moveItem(listId: String, itemId: String, delta: Int) = viewModelScope.launch {
+        val ids = repo.getItems(listId).map { it.id }
+        val moved = movedIds(ids, itemId, delta) ?: return@launch
+        reorderItems(listId, moved, itemId)
+    }
 
     // ---- Попытки ----
+    /** Записывает результат письма и кладёт его в стек отмены: после «Дальше» его ещё можно снять стрелкой. */
     suspend fun recordAttempt(item: WordItem, lang: Lang, ms: Long): Attempt {
         val word = if (lang == Lang.EN) item.en else item.ru
-        return repo.addAttempt(
+        val a = repo.addAttempt(
             lang = lang, word = word, letters = countLetters(word).coerceAtLeast(1), ms = ms,
             source = Attempt.SOURCE_APP, listId = item.listId, itemId = item.id,
         )
+        // Возвращённая попытка получает новый id, поэтому запись стека держит текущую копию.
+        var current = a
+        pushUndo(
+            UndoEntry(
+                "attempt:${a.id}", item.listId, "результат «$word» ${fmtTime(ms, tenths = true)}",
+                undo = { repo.deleteAttempt(current.id) }, redo = { current = repo.restoreAttempt(current) },
+            ),
+        )
+        return a
     }
 
     fun addPaperAttempt(lang: Lang, word: String?, letters: Int, ms: Long) = viewModelScope.launch {
@@ -424,7 +554,8 @@ class AppViewModel(
         showToast("Результат добавлен")
     }
 
-    fun deleteAttempt(id: String) = viewModelScope.launch { repo.deleteAttempt(id) }
+    /** «Отменить» на экране результата: попытка удаляется и из стека отмены тоже. */
+    fun deleteAttempt(id: String) = viewModelScope.launch { repo.deleteAttempt(id); forgetUndo("attempt:$id") }
 
     // ---- Микрофон ----
     /** Распознаватель с настройками телефонного микрофона; освобождать в DisposableEffect экрана. */
@@ -455,8 +586,13 @@ class AppViewModel(
                     app.repository, app.settings, ClaudeVocabParser(app, api), Updater(app),
                     ClaudeStory(api), ClaudeJudge(api), ClaudeHomework(app, api),
                     ClaudeGrammar(app, api), ClaudeReading(app, api), ClaudeReadingJudge(api),
-                    app.sync, api, ClaudeBatch(api), ClaudeSorter(app, api),
+                    app.sync, File(app.filesDir, "fonts"), api, ClaudeBatch(api), ClaudeSorter(app, api),
                 ) as T
             }
+    }
+
+    private companion object {
+        /** Сколько последних действий помнит стек отмены. */
+        const val UNDO_DEPTH = 12
     }
 }

@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ import ru.tsakunov.pravka.domain.Verdict
 import ru.tsakunov.pravka.domain.VerdictKind
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.evaluate
+import ru.tsakunov.pravka.domain.nextTask
 import ru.tsakunov.pravka.domain.statsFor
 import ru.tsakunov.pravka.ui.components.*
 import ru.tsakunov.pravka.ui.fmtNum
@@ -65,6 +68,8 @@ fun PracticeScreen(
 ) {
     val items by vm.observeItems(listId).collectAsStateWithLifecycle(initialValue = emptyList())
     val attempts by vm.attempts.collectAsStateWithLifecycle()
+    val undoStack by vm.undoStack.collectAsStateWithLifecycle()
+    val cursive by vm.cursiveFonts.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -109,11 +114,9 @@ fun PracticeScreen(
         }
     }
 
+    // «Дальше» держится за язык: сначала все ненаписанные слова этого языка, потом другой.
     fun goNext() {
-        val tasks = tasksOf(items)
-        val idx = tasks.indexOfFirst { it.item.id == itemId && it.lang == lang }
-        val ordered = if (idx >= 0) tasks.drop(idx + 1) + tasks.take(idx + 1) else tasks
-        val next = ordered.firstOrNull { doneToday(attempts, it) == null }
+        val next = nextTask(items, attempts, itemId, lang)
         if (next == null) onAllDone() else onNext(next.item.id, next.lang)
     }
 
@@ -124,6 +127,15 @@ fun PracticeScreen(
                 TopAppBar(
                     navigationIcon = { BackIcon(onBack) },
                     title = { LangTag(lang, big = true) },
+                    actions = {
+                        // До СТАРТа можно снять предыдущий результат (например, СТОП нажали не вовремя и уже ушли «Дальше»).
+                        // Пока показан свой результат, для него есть кнопка «Отменить» ниже.
+                        if (phase is Phase.Ready && undoStack.any { it.listId == listId }) {
+                            IconButton(onClick = { vm.undoLast(listId) }) {
+                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Отменить последнее действие", tint = PravkaColors.Ink)
+                            }
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = PravkaColors.Page),
                 )
             },
@@ -134,6 +146,8 @@ fun PracticeScreen(
             ) {
                 Spacer(Modifier.height(8.dp))
                 WordDisplay(text)
+                // Как это пишется в тетради: прописью, со всеми соединениями.
+                if (text.isNotBlank()) CursiveWord(text, lang, cursive.forLang(lang), Modifier.padding(bottom = 6.dp))
                 Text(lettersWord(letters), color = PravkaColors.Muted, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(6.dp))
                 if (langStats.n > 0) {

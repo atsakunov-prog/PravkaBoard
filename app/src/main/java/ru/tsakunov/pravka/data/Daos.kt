@@ -55,6 +55,9 @@ interface WordListDao {
     @Update
     suspend fun updateItem(item: WordItem)
 
+    @Update
+    suspend fun updateItems(items: List<WordItem>)
+
     @Delete
     suspend fun deleteItem(item: WordItem)
 
@@ -325,4 +328,8 @@ interface TombstoneDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(tombstones: List<Tombstone>)
+
+    /** Снимает надгробие с записи, которую вернули к жизни («Вернуть» после удаления). */
+    @Query("DELETE FROM tombstones WHERE id = :id")
+    suspend fun delete(id: String)
 }

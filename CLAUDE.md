@@ -56,6 +56,7 @@ app/src/main/java/ru/tsakunov/pravka/
   data/Settings.kt                   SharedPreferences: ключ, модель, метрика, режим ридера, масштаб, токен GitHub
   data/Seed.kt                       бумажная статистика сентября 2026 (VERSION растёт при правках)
   domain/                            чистые функции: Stats, Repeats, ByLength, Matching, Reading, Overview,
+                                     Tasks (порядок слов Гармошки, «Дальше», перестановка),
                                      модели Homework, Grammar, Intake — всё покрыто юнит-тестами
   api/ClaudeApi.kt                   вызов Messages API: ToolRequest, strict tool, retry-логика
   api/Claude*.kt                     по одному классу на задачу: request() собирает запрос, fromToolInput() разбирает
@@ -69,7 +70,8 @@ app/src/main/java/ru/tsakunov/pravka/
   ui/vm/AppViewModel.kt              состояния экранов (sealed interface), кэш Flow по ключу
   ui/vm/IntakeCoordinator.kt         разбор всей домашки: сортировка страниц, параллельно или пакетом
   ui/screens/                        по экрану на файл; фазы экрана — sealed interface
-  ui/components/                     Common (Tab, кнопки, Pill, PravkaCard), Speech, PhotoPicker, графики
+  ui/components/                     Common (Tab, кнопки, Pill, PravkaCard), Speech, PhotoPicker, графики,
+                                     Cursive (шрифты прописи: встроенные в res/font, свои в filesDir/fonts)
   ui/theme/                          Palette × 2 (Warm, Ink), PravkaColors читает текущую из mutableStateOf, motion()
 ```
 
@@ -96,6 +98,10 @@ app/src/main/java/ru/tsakunov/pravka/
   дети без родителя пропускаются. Порядок вставки: родители раньше детей.
 - Любое удаление, которое должно дойти до другого устройства, идёт через Repository и внутри той же транзакции
   вызывает `bury(kind, id)`. Новый вид удаления = новая константа в `Tombstone` и ветка в `applyTombstone`.
+- Возврат после удаления («Вернуть», стрелка отмены): слово возвращается тем же id через `restoreItem`, который
+  ставит свежий `updatedAt` и снимает надгробие; в слиянии слово с `updatedAt` новее надгробия побеждает могилу
+  (и в `applyTombstone`, и при приёме чужих слов), иначе другое устройство удалило бы его обратно. Попытки
+  неизменяемы и возвращаются копией с новым id (`restoreAttempt`), старое надгробие не мешает.
 - `SyncManager.sync` держит `Mutex.tryLock`: второй проход поверх идущего не запускается, а возвращает текущее
   состояние. Автозапуск (старт, `MainActivity.onStop`) не чаще раза в минуту. Конфликт записи (файл изменился)
   разрешается одним повтором: забрать → влить → отправить.
@@ -116,6 +122,29 @@ app/src/main/java/ru/tsakunov/pravka/
 - Фото кодируются на `Dispatchers.IO`; `BitmapFactory.decodeStream` с `inJustDecodeBounds` возвращает null
   по контракту, проверять поток, а не результат.
 - Тексты ошибок для пользователя по-русски, из `describeError`; сырые ответы сервера не показывать.
+
+### Отмена и порядок слов
+- Стек отмены живёт в `AppViewModel` (`UndoEntry`: key, listId, label, undo, redo), не в базе. Каждое действие над
+  словами Гармошки (удаление, правка, перестановка, записанный результат) кладёт запись через `pushUndo`; `key`
+  вида `item:<id>` / `attempt:<id>` / `order:<listId>` схлопывает повторные действия над той же записью.
+  «Отменить» на экране результата удаляет попытку и её запись стека (`forgetUndo`).
+- Удаление слова без диалога: сразу удаляем и показываем `ToastMessage` с кнопкой «Вернуть» (`showToast(ToastMessage)`).
+  Подсказка с кнопкой висит `SnackbarDuration.Long`. Не возвращать `ConfirmDialog` на удаление слова.
+- Порядок слов — `position`; менять только через `Repository.reorderItems(listId, orderedIds)`: пишутся лишь строки
+  с изменившейся позицией, каждая со свежим `updatedAt`, иначе перестановка не доедет по синхронизации.
+- «Дальше» в Гармошке — `domain/Tasks.nextTask`: сначала ненаписанные слова того же языка (после текущего, потом с
+  начала), потом другой язык. `tasksOf` отдаёт все английские, затем все русские; не чередовать языки.
+- Перетаскивание в `ListScreen` (`DragReorder`) держит локальный порядок до ответа Room и не прокручивает список;
+  для далёких переездов есть пункты меню «Выше» / «Ниже». На E-Ink `animateItem` не ставится.
+
+### Пропись
+- Под словом в Гармошке `CursiveWord`: английский — `res/font/playwrite_us_trad.ttf` (Playwrite US Trad, OFL),
+  русский — `res/font/marck_script.ttf` (Marck Script, OFL); тексты лицензий в `assets/licenses`. Свой шрифт
+  кладётся в `filesDir/fonts/cursive_<lang>.ttf` через настройки (`installCursiveFont` проверяет файл
+  `Typeface.Builder`), между устройствами не синхронизируется. Шрифты Propisi (ParaType) и подобные в репозиторий
+  не класть: они платные.
+- Обучалка озвучивает английское слово сама при появлении карточки (`LaunchedEffect(item.id)`), контроша и училка
+  озвучивают только по действию: там ребёнок должен сначала вспомнить сам.
 
 ### Compose
 - Экран = фазы (`sealed interface`). Действие, которое пишет в базу, переключает фазу синхронно до

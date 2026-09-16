@@ -16,11 +16,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,6 +30,7 @@ import kotlinx.coroutines.withContext
 import ru.tsakunov.pravka.BuildConfig
 import ru.tsakunov.pravka.api.GitHubStore
 import ru.tsakunov.pravka.api.Updater
+import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.SettingsState
 import ru.tsakunov.pravka.data.SyncState
 import ru.tsakunov.pravka.ui.components.*
@@ -35,6 +38,7 @@ import ru.tsakunov.pravka.ui.fmtDateTime
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import ru.tsakunov.pravka.ui.vm.UpdateState
+import java.io.File
 import java.time.LocalDate
 
 @Composable
@@ -81,6 +85,25 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
         }
     }
 
+    // Свой шрифт прописи: файл .ttf копируется в память приложения; для какого языка — запоминается перед выбором.
+    val cursive by vm.cursiveFonts.collectAsStateWithLifecycle()
+    var fontLang by remember { mutableStateOf(Lang.EN) }
+    val fontLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val lang = fontLang
+        scope.launch {
+            val bytes = runCatching {
+                withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
+            }.getOrNull()
+            val ok = bytes != null && bytes.isNotEmpty() && vm.installCursiveFont(lang, bytes)
+            vm.showToast(if (ok) "Шрифт прописи для ${lang.title()} поставлен" else "Не получилось прочитать файл как шрифт")
+        }
+    }
+    fun pickFont(lang: Lang) {
+        fontLang = lang
+        fontLauncher.launch(arrayOf("font/*", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream", "*/*"))
+    }
+
     Scaffold(
         containerColor = PravkaColors.Page,
         topBar = {
@@ -125,6 +148,23 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     "Крупнее всё разом: буквы, кнопки, отступы. На книжке по умолчанию 150%.",
                     style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 6.dp),
                 )
+            }
+
+            PravkaCard {
+                Text("Пропись в Гармошке", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Под печатным словом показано, как оно пишется в тетради, со всеми соединениями. Английский — школьный курсив " +
+                        "${CursiveFonts.EN_NAME}. Для русского школьной прописи со свободной лицензией нет, встроен ${CursiveFonts.RU_NAME}; " +
+                        "точную пропись (например, Propisi от ParaType) можно подложить файлом .ttf, отдельно на телефоне и на книжке.",
+                    style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                CursiveFontRow(Lang.EN, "a hen · to plant", cursive.en, onPick = { pickFont(Lang.EN) }, onReset = { vm.removeCursiveFont(Lang.EN) })
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = PravkaColors.Grid)
+                Spacer(Modifier.height(10.dp))
+                CursiveFontRow(Lang.RU, "курица · пшеница", cursive.ru, onPick = { pickFont(Lang.RU) }, onReset = { vm.removeCursiveFont(Lang.RU) })
             }
 
             PravkaCard {
@@ -354,5 +394,27 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             onConfirm = { vm.resetAll() },
             onDismiss = { confirmReset = false },
         )
+    }
+}
+
+/** Строка настройки шрифта прописи: образец в текущем шрифте, откуда он взят и кнопки «Выбрать файл» / «Встроенный». */
+@Composable
+private fun CursiveFontRow(lang: Lang, sample: String, custom: File?, onPick: () -> Unit, onReset: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        LangTag(lang)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            if (custom != null) "Свой файл шрифта" else "Встроенный: ${CursiveFonts.bundledName(lang)}",
+            style = MaterialTheme.typography.bodyMedium, color = PravkaColors.Ink2,
+        )
+    }
+    Text(
+        sample,
+        style = TextStyle(fontFamily = cursiveFamily(lang, custom), fontSize = 34.sp, lineHeight = 54.sp, color = PravkaColors.Ink),
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = onPick) { Text("Выбрать файл .ttf", color = PravkaColors.EnText) }
+        if (custom != null) TextButton(onClick = onReset) { Text("Вернуть встроенный", color = PravkaColors.Ink2) }
     }
 }

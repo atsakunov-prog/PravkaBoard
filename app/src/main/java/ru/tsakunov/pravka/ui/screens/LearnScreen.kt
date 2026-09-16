@@ -94,6 +94,8 @@ fun LearnScreen(vm: AppViewModel, listId: String, onBack: () -> Unit, onTeach: (
             } else {
                 val item = items.getOrNull(index)
                 if (item == null) { LaunchedEffect(Unit) { index = 0 }; return@Column }
+                // Английское слово звучит само, как только карточка появилась; кнопка с динамиком повторяет.
+                LaunchedEffect(item.id) { speaker.speak(item.en) }
                 SwipeCard(
                     key = item.id,
                     onSwiped = { dir ->

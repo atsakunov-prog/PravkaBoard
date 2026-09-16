@@ -8,6 +8,7 @@ import ru.tsakunov.pravka.domain.HomeworkResult
 import ru.tsakunov.pravka.domain.ReadingDetail
 import ru.tsakunov.pravka.domain.Snapshot
 import ru.tsakunov.pravka.domain.countWords
+import ru.tsakunov.pravka.domain.reorder
 import java.util.UUID
 
 class Repository(
@@ -76,10 +77,33 @@ class Repository(
         return item
     }
 
-    suspend fun updateItem(item: WordItem, en: String, ru: String) =
-        lists.updateItem(item.copy(en = en.trim(), ru = ru.trim(), updatedAt = System.currentTimeMillis()))
+    /** Меняет только текст слова у текущей строки: позиция могла сдвинуться после того, как экран взял копию. */
+    suspend fun updateItem(id: String, en: String, ru: String): WordItem? {
+        val cur = lists.getItem(id) ?: return null
+        val updated = cur.copy(en = en.trim(), ru = ru.trim(), updatedAt = System.currentTimeMillis())
+        lists.updateItem(updated)
+        return updated
+    }
 
     suspend fun deleteItem(item: WordItem) = db.withTransaction { lists.deleteItem(item); bury(Tombstone.ITEM, item.id) }
+
+    /**
+     * Возвращает удалённое слово («Вернуть» после удаления). Идентификатор прежний, чтобы попытки по нему не
+     * осиротели; updatedAt свежий и потому новее надгробия: по правилу слияния такая запись побеждает могилу
+     * и на другом устройстве, если надгробие уже успело туда уйти.
+     */
+    suspend fun restoreItem(item: WordItem) = db.withTransaction {
+        lists.insertItems(listOf(item.copy(updatedAt = System.currentTimeMillis())))
+        tombstones.delete(item.id)
+    }
+
+    /** Переставляет слова списка в порядке orderedIds; пишутся только строки, чья позиция изменилась. */
+    suspend fun reorderItems(listId: String, orderedIds: List<String>) {
+        val ordered = reorder(lists.getItems(listId), orderedIds) { it.id }
+        val now = System.currentTimeMillis()
+        val changed = ordered.mapIndexedNotNull { i, it -> if (it.position != i) it.copy(position = i, updatedAt = now) else null }
+        if (changed.isNotEmpty()) lists.updateItems(changed)
+    }
 
     // ---- Попытки ----
     suspend fun addAttempt(
@@ -101,6 +125,16 @@ class Repository(
     }
 
     suspend fun deleteAttempt(id: String) = db.withTransaction { attempts.delete(id); bury(Tombstone.ATTEMPT, id) }
+
+    /**
+     * Возвращает удалённую попытку («Вернуть» после отмены результата). Попытки неизменяемы и ни на что не
+     * ссылаются, поэтому копия получает новый идентификатор, а надгробие старого остаётся и никому не мешает.
+     */
+    suspend fun restoreAttempt(a: Attempt): Attempt {
+        val copy = a.copy(id = newId())
+        attempts.insert(copy)
+        return copy
+    }
 
     // ---- Рассказы и контрольные ----
     fun observeStory(listId: String): Flow<Story?> = stories.observeLatest(listId)
@@ -229,6 +263,8 @@ class Repository(
     /**
      * Слияние слепка с местной базой. Правила:
      * - надгробия применяются первыми: что удалили на другом устройстве, удаляется и здесь и больше не принимается;
+     *   исключение — слово с updatedAt новее надгробия: его вернули кнопкой «Вернуть» после удаления, оно живёт,
+     *   а надгробие снимается;
      * - списки, слова, домашки и прогресс по правилам берутся более поздние по updatedAt; при равном времени и разном
      *   содержимом побеждает чужая версия (иначе две копии со старыми записями без updatedAt расходились бы навсегда
      *   и пересылали файл друг другу при каждом проходе), при одинаковом содержимом ничего не пишется;
@@ -255,11 +291,13 @@ class Repository(
                 l.newerThan(existing.updatedAt, existing) -> { lists.updateList(l); changed++ }
             }
         }
-        val newItems = s.items.filter { it.id !in dead && it.listId in listIds }.filter { i ->
+        val graveTs = (tombstones.all()).associate { it.id to it.ts }
+        val newItems = s.items.filter { it.listId in listIds && it.outlivesGrave(graveTs[it.id]) }.filter { i ->
             val existing = lists.getItem(i.id)
             existing == null || i.newerThan(existing.updatedAt, existing)
         }
         lists.insertItems(newItems)
+        newItems.forEach { if (it.id in graveTs) tombstones.delete(it.id) }
         changed += newItems.size
 
         changed += insertMissing(attempts.allIds(), s.attempts.filter { it.id !in dead }, { it.id }) { attempts.insertAll(it) }
@@ -306,6 +344,8 @@ class Repository(
     /** Чужая запись побеждает, если она новее или ровесница с другим содержимым; одинаковую не трогаем. */
     private fun WordList.newerThan(existingUpdatedAt: Long, existing: WordList) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
     private fun WordItem.newerThan(existingUpdatedAt: Long, existing: WordItem) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
+    /** Без могилы слово живо; с могилой — только если его правили (вернули) уже после удаления. */
+    private fun WordItem.outlivesGrave(graveTs: Long?) = graveTs == null || updatedAt > graveTs
     private fun Homework.newerThan(existingUpdatedAt: Long, existing: Homework) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
     private fun GrammarProgress.newerThan(existingUpdatedAt: Long, existing: GrammarProgress) = updatedAt > existingUpdatedAt || (updatedAt == existingUpdatedAt && this != existing)
 
@@ -319,7 +359,8 @@ class Repository(
     /** Удаление по надгробию с другого устройства; true, если что-то удалилось. */
     private suspend fun applyTombstone(t: Tombstone): Boolean = when (t.kind) {
         Tombstone.LIST -> lists.getList(t.id)?.let { lists.deleteList(t.id); true } ?: false
-        Tombstone.ITEM -> lists.getItem(t.id)?.let { lists.deleteItemById(t.id); true } ?: false
+        // Слово, возвращённое после удаления, новее надгробия и остаётся жить.
+        Tombstone.ITEM -> lists.getItem(t.id)?.takeIf { it.updatedAt <= t.ts }?.let { lists.deleteItemById(t.id); true } ?: false
         Tombstone.ATTEMPT -> { attempts.delete(t.id); true }
         Tombstone.STORY -> { reading.deleteRunsForText(t.id); stories.deleteById(t.id); true }
         Tombstone.HOMEWORK -> homeworks.get(t.id)?.let { homeworks.delete(t.id); true } ?: false
