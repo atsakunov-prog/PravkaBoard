@@ -34,13 +34,20 @@ class Speaker(context: Context) {
         pending?.let { (t, l, s) -> pending = null; speak(t, l, s) }
     }
 
-    fun speak(text: String, locale: Locale = Locale.US, slow: Boolean = true) {
-        if (text.isBlank()) return
-        if (!ready) { pending = Triple(text, locale, slow); return }
+    /** false — у движка нет голоса для этого языка, фраза не прозвучит; до готовности движка считается, что прозвучит. */
+    fun speak(text: String, locale: Locale = Locale.US, slow: Boolean = true): Boolean {
+        if (text.isBlank()) return false
+        if (!ready) { pending = Triple(text, locale, slow); return true }
         val lang = tts.setLanguage(locale)
-        if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) return
+        if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) return false
         tts.setSpeechRate(if (slow) 0.85f else 1.0f)
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pravka-${System.currentTimeMillis()}")
+        return true
+    }
+
+    companion object {
+        val RU: Locale = Locale.forLanguageTag("ru-RU")
+        fun localeOf(lang: ru.tsakunov.pravka.data.Lang): Locale = if (lang == ru.tsakunov.pravka.data.Lang.EN) Locale.US else RU
     }
 
     fun stop() = runCatching { tts.stop() }

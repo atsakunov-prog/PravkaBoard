@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -76,6 +76,7 @@ fun PracticeScreen(
     val cursive by vm.cursiveFonts.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val speaker = rememberSpeaker()
 
     val item = items.firstOrNull { it.id == itemId }
     val task = item?.let { Task(it, lang) }
@@ -87,14 +88,26 @@ fun PracticeScreen(
     var elapsed by remember(itemId, lang) { mutableLongStateOf(0L) }
     var confetti by remember { mutableIntStateOf(0) }
 
-    // Режим по слову: ещё не писал сегодня — списывание, оба слова видны; уже писал (зелёное в списке) — по памяти,
-    // слово под плашкой, видна подсказка. Фиксируется до СТОПа: после записи счётчик вырастет, а экран не должен
-    // перескочить в другой режим.
+    // Режим по слову: ещё не писал сегодня — списывание, оба слова видны; уже писал (зелёное в списке) — по памяти:
+    // видна подсказка, слово спрятано под плашкой, плашка его произносит, а показывается оно только после СТОПа,
+    // чтобы Боря сверил написанное. Режим фиксируется до СТОПа: после записи счётчик вырастет, а экран не должен
+    // перескочить.
     val todayCount = task?.let { attemptsToday(attempts, it) } ?: 0
     var pass by remember(itemId, lang) { mutableIntStateOf(todayCount) }
     LaunchedEffect(todayCount) { if (phase is Phase.Ready) pass = todayCount }
     val recall = pass >= 1 && helper.isNotBlank()
-    var revealed by remember(itemId, lang) { mutableStateOf(false) }
+    /** Слово уже прозвучало: можно брать ручку. */
+    var heard by remember(itemId, lang) { mutableStateOf(false) }
+    /** Голоса для языка нет: вместо звука слово показывается, иначе писать нечего. */
+    var shownInstead by remember(itemId, lang) { mutableStateOf(false) }
+    val hidden = recall && phase !is Phase.Result && !shownInstead
+    fun hear() {
+        heard = true
+        if (!speaker.speak(text, Speaker.localeOf(lang))) {
+            shownInstead = true
+            vm.showToast("На этом устройстве нет голоса для этого языка, показываю слово")
+        }
+    }
 
     // Тик таймера
     val running = phase as? Phase.Running
@@ -160,12 +173,12 @@ fun PracticeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(8.dp))
-                if (recall && !revealed) {
+                if (hidden) {
                     // По памяти: как завёрнутый столбик гармошки. Видна подсказка, слово под плашкой:
-                    // Боря переводит вслух, нажимает и проверяет себя.
+                    // Боря переводит вслух, нажимает, слышит слово и пишет его; увидит только после СТОПа.
                     HelperWord(helper, lang.other(), big = true)
                     Spacer(Modifier.height(14.dp))
-                    CoverPlate(lang) { revealed = true }
+                    CoverPlate(lang, heard, onHear = { hear() })
                 } else {
                     WordDisplay(text)
                     // Как это пишется в тетради: прописью, со всеми соединениями.
@@ -199,8 +212,8 @@ fun PracticeScreen(
                         )
                         Spacer(Modifier.weight(1f))
                         when (p) {
-                            // По памяти СТАРТ ждёт, пока слово открыто: сначала перевод вслух, потом ручка.
-                            is Phase.Ready -> HugeButton("СТАРТ", PravkaColors.Good, enabled = item != null && letters > 0 && (!recall || revealed)) {
+                            // По памяти СТАРТ ждёт, пока слово прозвучит: сначала перевод вслух и звук, потом ручка.
+                            is Phase.Ready -> HugeButton("СТАРТ", PravkaColors.Good, enabled = item != null && letters > 0 && (!recall || heard || shownInstead)) {
                                 elapsed = 0
                                 phase = Phase.Running(SystemClock.elapsedRealtime())
                             }
@@ -273,21 +286,25 @@ private fun HelperWord(text: String, lang: Lang, big: Boolean) {
     }
 }
 
-/** Плашка на месте слова во втором круге: нажатие открывает слово для проверки. */
+/** Плашка на месте спрятанного слова: нажатие произносит его, само слово откроется после СТОПа. */
 @Composable
-private fun CoverPlate(lang: Lang, onOpen: () -> Unit) {
+private fun CoverPlate(lang: Lang, heard: Boolean, onHear: () -> Unit) {
     Surface(
-        onClick = onOpen,
+        onClick = onHear,
         modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp),
         shape = MaterialTheme.shapes.extraLarge,
         color = lang.softColor(),
         border = BorderStroke(2.dp, lang.color()),
     ) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(Icons.Filled.VisibilityOff, contentDescription = null, tint = lang.textColor(), modifier = Modifier.size(32.dp))
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = lang.textColor(), modifier = Modifier.size(36.dp))
             Spacer(Modifier.height(8.dp))
             Text(
-                if (lang == Lang.EN) "Скажи по-английски, потом нажми и проверь" else "Скажи по-русски, потом нажми и проверь",
+                when {
+                    heard -> "Послушать ещё раз. Слово откроется после СТОПа"
+                    lang == Lang.EN -> "Скажи по-английски, потом нажми и послушай"
+                    else -> "Скажи по-русски, потом нажми и послушай"
+                },
                 color = lang.textColor(), fontWeight = FontWeight.Bold, fontSize = 18.sp, textAlign = TextAlign.Center,
             )
         }
