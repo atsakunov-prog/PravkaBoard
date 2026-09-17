@@ -3,13 +3,43 @@ package ru.tsakunov.pravka.domain
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
+import java.time.LocalDate
 
 /**
  * Сколько раз слово пишется за день, прежде чем «Дальше» начнёт его пропускать. Как на бумаге: первый раз —
- * списывание (оба слова видны), второй — по памяти (видна только подсказка на другом языке, слово открывается по
- * нажатию для проверки). Режим решается по каждому слову отдельно: уже написанное сегодня идёт по памяти.
+ * списывание, второй — по памяти.
  */
 const val ACCORDION_PASSES = 2
+
+/** Режим Гармошки для списка: переключатель «Пишем / Учим» над словами. */
+enum class PracticeMode(val label: String) {
+    /** Списывание: слово видно, под ним пропись и мелкий перевод. */
+    COPY("Пишем"),
+    /** По памяти: видна подсказка, слово спрятано и звучит по плашке, открывается после СТОПа. */
+    RECALL("Учим"),
+}
+
+/**
+ * Стартовое положение переключателя, пока папа его не трогал: «Пишем», пока в списке есть слово, не написанное
+ * сегодня ни разу; «Учим», когда каждое написано хоть раз (первые два столбика гармошки готовы).
+ */
+fun autoMode(items: List<WordItem>, attempts: List<Attempt>, today: (Long) -> Boolean = ::isToday): PracticeMode {
+    val tasks = tasksOf(items)
+    return if (tasks.isNotEmpty() && tasks.all { attemptsToday(attempts, it, today) >= 1 }) PracticeMode.RECALL else PracticeMode.COPY
+}
+
+/** Выбор папы хранится строкой вида «recall@2026-09-17»: на следующий день переключатель снова встаёт сам. */
+fun encodeModeOverride(mode: PracticeMode, day: LocalDate): String = "${mode.name.lowercase()}@$day"
+
+fun decodeModeOverride(value: String?, today: LocalDate): PracticeMode? {
+    val (name, day) = value?.split('@')?.takeIf { it.size == 2 } ?: return null
+    if (day != today.toString()) return null
+    return PracticeMode.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+}
+
+/** Режим, в котором реально пойдёт слово: выбор папы на сегодня, иначе автоматика. */
+fun effectiveMode(override: PracticeMode?, items: List<WordItem>, attempts: List<Attempt>, today: (Long) -> Boolean = ::isToday): PracticeMode =
+    override ?: autoMode(items, attempts, today)
 
 /** Слово в конкретном языке — единица тренировки в Гармошке. */
 data class Task(val item: WordItem, val lang: Lang) {

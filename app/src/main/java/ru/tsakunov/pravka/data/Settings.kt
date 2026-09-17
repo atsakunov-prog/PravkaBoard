@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.json.JSONObject
 import ru.tsakunov.pravka.domain.isEinkDevice
 
 /** Метрика скорости на графиках. */
@@ -32,6 +33,8 @@ data class SettingsState(
     /** Короткий итог последней синхронизации: «получено 12» или текст ошибки. */
     val lastSyncNote: String = "",
     val lastSyncOk: Boolean = true,
+    /** Переключатель «Пишем / Учим» по спискам: listId → «recall@2026-09-17» (см. domain/Tasks.decodeModeOverride). */
+    val practiceModes: Map<String, String> = emptyMap(),
 ) {
     companion object {
         const val DEFAULT_MODEL = "claude-opus-5"
@@ -65,7 +68,22 @@ class Settings(context: Context) {
         lastSyncAt = prefs.getLong(KEY_LAST_SYNC_AT, 0L),
         lastSyncNote = prefs.getString(KEY_LAST_SYNC_NOTE, "") ?: "",
         lastSyncOk = prefs.getBoolean(KEY_LAST_SYNC_OK, true),
+        practiceModes = readPracticeModes(),
     )
+
+    private fun readPracticeModes(): Map<String, String> {
+        val raw = prefs.getString(KEY_PRACTICE_MODES, null) ?: return emptyMap()
+        val o = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyMap()
+        return o.keys().asSequence().associateWith { o.optString(it, "") }.filterValues { it.isNotEmpty() }
+    }
+
+    /** null снимает выбор для списка. Устаревшие записи (другой день) вычищаются заодно, чтобы файл не рос. */
+    fun setPracticeMode(listId: String, value: String?, today: String) {
+        val m = readPracticeModes().filterValues { it.endsWith("@$today") }.toMutableMap()
+        if (value == null) m.remove(listId) else m[listId] = value
+        prefs.edit().putString(KEY_PRACTICE_MODES, JSONObject(m as Map<*, *>).toString()).apply()
+        _state.value = read()
+    }
 
     fun setReaderMode(on: Boolean) {
         prefs.edit().putBoolean(KEY_READER_MODE, on).apply()
@@ -158,5 +176,6 @@ class Settings(context: Context) {
         const val KEY_LAST_SYNC_AT = "last_sync_at"
         const val KEY_LAST_SYNC_NOTE = "last_sync_note"
         const val KEY_LAST_SYNC_OK = "last_sync_ok"
+        const val KEY_PRACTICE_MODES = "practice_modes"
     }
 }

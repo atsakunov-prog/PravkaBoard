@@ -49,7 +49,11 @@ import ru.tsakunov.pravka.domain.ReadingDetail
 import ru.tsakunov.pravka.domain.SentenceResult
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.countWords
+import ru.tsakunov.pravka.domain.PracticeMode
+import ru.tsakunov.pravka.domain.decodeModeOverride
+import ru.tsakunov.pravka.domain.encodeModeOverride
 import ru.tsakunov.pravka.domain.movedIds
+import java.time.LocalDate
 import ru.tsakunov.pravka.ui.components.CursiveFontFiles
 import ru.tsakunov.pravka.ui.components.SpeechInput
 import ru.tsakunov.pravka.ui.fmtTime
@@ -138,6 +142,12 @@ class AppViewModel(
     fun syncNow() = syncManager.syncNow()
     fun setSyncEnabled(on: Boolean) { settings.setSyncEnabled(on); if (on) syncManager.syncNow() }
     fun setGithubToken(v: String) = settings.setGithubToken(v)
+
+    // ---- Переключатель «Пишем / Учим» над списком слов ----
+    fun setPracticeMode(listId: String, mode: PracticeMode) =
+        settings.setPracticeMode(listId, encodeModeOverride(mode, LocalDate.now()), LocalDate.now().toString())
+    /** Выбор папы на сегодня для списка; null — переключатель стоит сам, по автоматике. */
+    fun practiceModeOverride(listId: String): PracticeMode? = decodeModeOverride(settings.state.value.practiceModes[listId], LocalDate.now())
 
     // ---- Экран ----
     fun setReaderMode(on: Boolean) = settings.setReaderMode(on)

@@ -35,8 +35,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
+import ru.tsakunov.pravka.domain.PracticeMode
 import ru.tsakunov.pravka.domain.Task
 import ru.tsakunov.pravka.domain.attemptsForWord
+import ru.tsakunov.pravka.domain.decodeModeOverride
+import ru.tsakunov.pravka.domain.effectiveMode
 import ru.tsakunov.pravka.domain.attemptsToday
 import ru.tsakunov.pravka.domain.countLetters
 import ru.tsakunov.pravka.domain.doneToday
@@ -53,6 +56,7 @@ import ru.tsakunov.pravka.ui.plural
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
 import ru.tsakunov.pravka.ui.wordsWord
+import java.time.LocalDate
 
 @Composable
 fun ListScreen(
@@ -66,6 +70,7 @@ fun ListScreen(
     val attempts by vm.attempts.collectAsStateWithLifecycle()
     val undoStack by vm.undoStack.collectAsStateWithLifecycle()
     val canUndo = undoStack.any { it.listId == listId }
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
 
     var editing by remember { mutableStateOf<WordItem?>(null) }
     var adding by remember { mutableStateOf(false) }
@@ -77,6 +82,8 @@ fun ListScreen(
     val next = remember(items, attempts) { nextTask(items, attempts, null, Lang.EN) }
     val doneDistinct = remember(todayHere) { todayHere.map { it.itemId to it.lang }.toSet().size }
     val repeats = remember(attempts, items) { repeatRowsForList(attempts, listId, items) }
+    // «Пишем / Учим»: выбор папы на сегодня, иначе автоматика (учим, когда всё написано хоть раз).
+    val mode = effectiveMode(decodeModeOverride(settings.practiceModes[listId], LocalDate.now()), items, attempts)
 
     // Перетаскивание за ручку: пока палец на строке, порядок живёт здесь и уходит в базу только при отпускании.
     val listState = rememberLazyListState()
@@ -122,6 +129,31 @@ fun ListScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item(key = "mode") {
+                PravkaCard {
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        PracticeMode.entries.forEachIndexed { i, m ->
+                            SegmentedButton(
+                                selected = mode == m,
+                                onClick = { vm.setPracticeMode(listId, m) },
+                                shape = SegmentedButtonDefaults.itemShape(index = i, count = PracticeMode.entries.size),
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = if (m == PracticeMode.COPY) PravkaColors.GoodSoft else PravkaColors.EnSoft,
+                                    activeContentColor = if (m == PracticeMode.COPY) PravkaColors.GoodText else PravkaColors.EnText,
+                                ),
+                            ) { Text(m.label, style = MaterialTheme.typography.titleMedium) }
+                        }
+                    }
+                    Text(
+                        when (mode) {
+                            PracticeMode.COPY -> "Слово видно, под ним пропись и перевод: списываем."
+                            PracticeMode.RECALL -> "Видна только подсказка. Плашка произносит слово, СТАРТ после звука, слово откроется после СТОПа."
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+
             item(key = "summary") {
                 PravkaCard {
                     if (todayHere.isNotEmpty()) {
@@ -141,8 +173,7 @@ fun ListScreen(
                             container = PravkaColors.Good,
                         )
                         Text(
-                            if (todayHere.isEmpty()) "Или нажми на любое слово ниже"
-                            else "Зелёное слово идёт по памяти: подсказка и плашка. Или нажми на любое слово ниже",
+                            "Или нажми на любое слово ниже",
                             style = MaterialTheme.typography.bodySmall, color = PravkaColors.Muted, textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 6.dp).align(Alignment.CenterHorizontally),
                         )

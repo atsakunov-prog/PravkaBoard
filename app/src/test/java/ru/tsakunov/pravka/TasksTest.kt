@@ -6,8 +6,14 @@ import org.junit.Test
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
 import ru.tsakunov.pravka.data.WordItem
+import ru.tsakunov.pravka.domain.PracticeMode
 import ru.tsakunov.pravka.domain.Task
 import ru.tsakunov.pravka.domain.attemptsToday
+import ru.tsakunov.pravka.domain.autoMode
+import ru.tsakunov.pravka.domain.decodeModeOverride
+import ru.tsakunov.pravka.domain.effectiveMode
+import ru.tsakunov.pravka.domain.encodeModeOverride
+import java.time.LocalDate
 import ru.tsakunov.pravka.domain.doneToday
 import ru.tsakunov.pravka.domain.movedIds
 import ru.tsakunov.pravka.domain.nextTask
@@ -105,6 +111,31 @@ class TasksTest {
         assertEquals(3, attemptsToday(attempts, Task(items[0], Lang.EN), today))
         assertNull(doneToday(attempts, Task(items[1], Lang.EN), today))
         assertEquals(0, attemptsToday(attempts, Task(items[1], Lang.EN), today))
+    }
+
+    @Test
+    fun autoMode_copyUntilEveryWordWrittenOnce() {
+        assertEquals(PracticeMode.COPY, autoMode(items, emptyList(), today))
+        assertEquals(PracticeMode.COPY, autoMode(items, onceEach().drop(1), today))
+        assertEquals(PracticeMode.RECALL, autoMode(items, onceEach(), today))
+        // Пустой список: писать нечего, но и учить нечего.
+        assertEquals(PracticeMode.COPY, autoMode(emptyList(), emptyList(), today))
+        // Выбор папы перекрывает автоматику в обе стороны.
+        assertEquals(PracticeMode.RECALL, effectiveMode(PracticeMode.RECALL, items, emptyList(), today))
+        assertEquals(PracticeMode.COPY, effectiveMode(PracticeMode.COPY, items, onceEach(), today))
+        assertEquals(PracticeMode.RECALL, effectiveMode(null, items, onceEach(), today))
+    }
+
+    @Test
+    fun modeOverride_roundTrips_andExpiresNextDay() {
+        val day = LocalDate.of(2026, 9, 17)
+        val v = encodeModeOverride(PracticeMode.RECALL, day)
+        assertEquals("recall@2026-09-17", v)
+        assertEquals(PracticeMode.RECALL, decodeModeOverride(v, day))
+        assertNull(decodeModeOverride(v, day.plusDays(1)))
+        assertNull(decodeModeOverride(null, day))
+        assertNull(decodeModeOverride("garbage", day))
+        assertNull(decodeModeOverride("dance@2026-09-17", day))
     }
 
     @Test

@@ -37,11 +37,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ru.tsakunov.pravka.data.Attempt
 import ru.tsakunov.pravka.data.Lang
+import ru.tsakunov.pravka.domain.PracticeMode
 import ru.tsakunov.pravka.domain.Task
 import ru.tsakunov.pravka.domain.Verdict
 import ru.tsakunov.pravka.domain.VerdictKind
-import ru.tsakunov.pravka.domain.attemptsToday
 import ru.tsakunov.pravka.domain.countLetters
+import ru.tsakunov.pravka.domain.decodeModeOverride
+import ru.tsakunov.pravka.domain.effectiveMode
 import ru.tsakunov.pravka.domain.evaluate
 import ru.tsakunov.pravka.domain.nextTask
 import ru.tsakunov.pravka.domain.statsFor
@@ -51,6 +53,7 @@ import ru.tsakunov.pravka.ui.fmtTime
 import ru.tsakunov.pravka.ui.lettersWord
 import ru.tsakunov.pravka.ui.theme.PravkaColors
 import ru.tsakunov.pravka.ui.vm.AppViewModel
+import java.time.LocalDate
 
 private sealed interface Phase {
     data object Ready : Phase
@@ -74,6 +77,7 @@ fun PracticeScreen(
     val attempts by vm.attempts.collectAsStateWithLifecycle()
     val undoStack by vm.undoStack.collectAsStateWithLifecycle()
     val cursive by vm.cursiveFonts.collectAsStateWithLifecycle()
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val speaker = rememberSpeaker()
@@ -88,14 +92,13 @@ fun PracticeScreen(
     var elapsed by remember(itemId, lang) { mutableLongStateOf(0L) }
     var confetti by remember { mutableIntStateOf(0) }
 
-    // Режим по слову: ещё не писал сегодня — списывание, оба слова видны; уже писал (зелёное в списке) — по памяти:
-    // видна подсказка, слово спрятано под плашкой, плашка его произносит, а показывается оно только после СТОПа,
-    // чтобы Боря сверил написанное. Режим фиксируется до СТОПа: после записи счётчик вырастет, а экран не должен
-    // перескочить.
-    val todayCount = task?.let { attemptsToday(attempts, it) } ?: 0
-    var pass by remember(itemId, lang) { mutableIntStateOf(todayCount) }
-    LaunchedEffect(todayCount) { if (phase is Phase.Ready) pass = todayCount }
-    val recall = pass >= 1 && helper.isNotBlank()
+    // Режим списка «Пишем / Учим» (переключатель над словами; без выбора папы — автоматика). «Учим»: видна подсказка,
+    // слово спрятано под плашкой, плашка его произносит, а показывается оно только после СТОПа, чтобы Боря сверил
+    // написанное. Режим фиксируется до СТОПа: автоматика после записи может перещёлкнуться, а экран не должен.
+    val current = effectiveMode(decodeModeOverride(settings.practiceModes[listId], LocalDate.now()), items, attempts)
+    var mode by remember(itemId, lang) { mutableStateOf(current) }
+    LaunchedEffect(current) { if (phase is Phase.Ready) mode = current }
+    val recall = mode == PracticeMode.RECALL && helper.isNotBlank()
     /** Слово уже прозвучало: можно брать ручку. */
     var heard by remember(itemId, lang) { mutableStateOf(false) }
     /** Голоса для языка нет: вместо звука слово показывается, иначе писать нечего. */
@@ -154,7 +157,12 @@ fun PracticeScreen(
             topBar = {
                 TopAppBar(
                     navigationIcon = { BackIcon(onBack) },
-                    title = { LangTag(lang, big = true) },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LangTag(lang, big = true)
+                            Pill(mode.label, bg = if (recall) PravkaColors.EnSoft else PravkaColors.GoodSoft, fg = if (recall) PravkaColors.EnText else PravkaColors.GoodText)
+                        }
+                    },
                     actions = {
                         // До СТАРТа можно снять предыдущий результат (например, СТОП нажали не вовремя и уже ушли «Дальше»).
                         // Пока показан свой результат, для него есть кнопка «Отменить» ниже.
