@@ -1133,7 +1133,12 @@ public final class PointerTracker implements PointerTrackerQueue.Element,
                 && (currentKey.getCode() == currentRepeatingKeyCode) && !isInDraggingFinger) {
             return;
         }
-        detectAndSendKey(currentKey, mKeyX, mKeyY, eventTime);
+        // When typing fast, the previous key is often released only after this key was pressed.
+        // Then the word before the cursor changed, and smart touch targets may now choose another letter.
+        final Key keyToSend = !isInDraggingFinger && mKeyDetector.getKeyboard() == mKeyboard
+                ? mKeyDetector.redetectLetterKey(currentKey, mKeyX, mKeyY)
+                : currentKey;
+        detectAndSendKey(keyToSend, mKeyX, mKeyY, eventTime);
         if (isInSlidingKeyInput) {
             callListenerOnFinishSlidingInput();
         }

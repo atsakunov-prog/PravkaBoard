@@ -469,6 +469,27 @@ public final class RichInputConnection implements PrivateCommandPerformer {
                 n, flags);
     }
 
+    /**
+     * Like {@link #getTextBeforeCursor}, but never asks the editor. Returns null if the cache doesn't
+     * contain all of the requested text that exists in the editor.
+     */
+    @Nullable public CharSequence getCachedTextBeforeCursor(final int n) {
+        final int committedLength = mCommittedTextBeforeComposingText.length();
+        final int composingLength = mComposingText.length();
+        if (INVALID_CURSOR_POSITION == mExpectedSelStart
+                || (committedLength + composingLength < n && committedLength + composingLength < mExpectedSelStart)) {
+            return null;
+        }
+        final StringBuilder s = new StringBuilder(n);
+        if (composingLength < n) {
+            s.append(mCommittedTextBeforeComposingText, Math.max(0, committedLength - (n - composingLength)), committedLength);
+            s.append(mComposingText);
+        } else {
+            s.append(mComposingText, composingLength - n, composingLength);
+        }
+        return s;
+    }
+
     @Nullable private CharSequence getTextBeforeCursorAndDetectLaggyConnection(
             final int operation, final long timeout, final int n, final int flags) {
         mIC = mParent.getCurrentInputConnection();

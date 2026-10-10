@@ -6,16 +6,31 @@
 
 package helium314.keyboard.keyboard;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 /**
  * This class handles key detection.
  */
 public class KeyDetector {
+    /** Allows choosing a different key than the one whose hitbox contains the touch point. */
+    public interface HitKeyCorrector {
+        /**
+         * @param hitKey the key whose hitbox contains the touch point
+         * @param x the x-coordinate of the touch point in keyboard coordinates
+         * @param y the y-coordinate of the touch point in keyboard coordinates
+         * @return the key that should be considered as hit, usually {@code hitKey}
+         */
+        @NonNull Key correct(@NonNull Keyboard keyboard, @NonNull Key hitKey, int x, int y);
+    }
+
     private final int mKeyHysteresisDistanceSquared;
     private final int mKeyHysteresisDistanceForSlidingModifierSquared;
 
     private Keyboard mKeyboard;
     private int mCorrectionX;
     private int mCorrectionY;
+    @Nullable private HitKeyCorrector mHitKeyCorrector;
 
     public KeyDetector() {
         this(0.0f /* keyHysteresisDistance */, 0.0f /* keyHysteresisDistanceForSlidingModifier */);
@@ -68,6 +83,23 @@ public class KeyDetector {
         return false;
     }
 
+    public void setHitKeyCorrector(@Nullable final HitKeyCorrector corrector) {
+        mHitKeyCorrector = corrector;
+    }
+
+    /**
+     * Detects the key again at the position where the letter {@code key} was detected, because the
+     * result of the {@link HitKeyCorrector} may have changed in the meantime, e.g. when another key
+     * was released while this one was held. Non-letter keys are never exchanged.
+     */
+    public Key redetectLetterKey(final Key key, final int x, final int y) {
+        if (mHitKeyCorrector == null || key == null || !Character.isLetter(key.getCode())) {
+            return key;
+        }
+        final Key newKey = detectHitKey(x, y);
+        return newKey != null && Character.isLetter(newKey.getCode()) ? newKey : key;
+    }
+
     /**
      * Detect the key whose hitbox the touch point is in.
      *
@@ -100,6 +132,9 @@ public class KeyDetector {
                 minDistance = distance;
                 primaryKey = key;
             }
+        }
+        if (primaryKey != null && mHitKeyCorrector != null) {
+            return mHitKeyCorrector.correct(mKeyboard, primaryKey, touchX, touchY);
         }
         return primaryKey;
     }

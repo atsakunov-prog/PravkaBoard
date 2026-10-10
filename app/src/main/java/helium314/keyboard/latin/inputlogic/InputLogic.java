@@ -81,6 +81,7 @@ import java.util.concurrent.TimeUnit;
 public final class InputLogic {
     private static final String TAG = InputLogic.class.getSimpleName();
     private static final char INLINE_EMOJI_SEARCH_MARKER = ':';
+    private static final int SMART_TOUCH_MAX_WORD_LENGTH = 32;
     private static final int[] EMPTY_CODE_POINTS = new int[0];
 
     // TODO : Remove this member when we can.
@@ -111,6 +112,7 @@ public final class InputLogic {
 
     private int mDeleteCount;
     private long mLastKeyTime;
+    private boolean mLastInputWasDelete;
     // todo: this is not used, so either remove it or do something with it
     public final TreeSet<Long> mCurrentlyPressedHardwareKeys = new TreeSet<>();
 
@@ -170,6 +172,7 @@ public final class InputLogic {
         mWordComposer.restartCombining(combiningSpec);
         resetComposingState(true /* alsoResetLastComposedWord */);
         mDeleteCount = 0;
+        mLastInputWasDelete = false;
         mSpaceState = SpaceState.NONE;
         mRecapitalizeStatus.disable(); // Do not perform recapitalize until the cursor is moved once
         mCurrentlyPressedHardwareKeys.clear();
@@ -499,6 +502,11 @@ public final class InputLogic {
             mDeleteCount = 0;
         }
         mLastKeyTime = inputTransaction.getTimestamp();
+        if (processedEvent.getKeyCode() == KeyCode.DELETE) {
+            mLastInputWasDelete = true;
+        } else if (processedEvent.getCodePoint() > 0) {
+            mLastInputWasDelete = false;
+        }
         mConnection.beginBatchEdit();
         if (!mWordComposer.isComposingWord()) {
             // TODO: is this useful? It doesn't look like it should be done here, but rather after
@@ -1464,6 +1472,31 @@ public final class InputLogic {
                 restartSuggestionsOnWordTouchedByCursor(inputTransaction.getSettingsValues(), currentKeyboardScript);
             }
         }
+    }
+
+    /**
+     * Returns the letters of the current word before the cursor, from which smart touch targets
+     * predict the next letter, or null if touches should not be corrected.
+     */
+    @Nullable
+    public CharSequence getWordBeforeCursorForSmartTouch(final SettingsValues settingsValues) {
+        // after a deletion the user is probably fixing a letter, don't fight against them
+        if (mLastInputWasDelete || mConnection.hasSelection()) return null;
+        if (mWordComposer.isComposingWord() && mWordComposer.isCursorFrontOrMiddleOfComposingWord()) return null;
+        // passwords, email addresses and URLs are not made of dictionary words
+        if (!settingsValues.mInputAttributes.mIsGeneralTextInput) return null;
+        // a space will be inserted before the next letter
+        if (mSpaceState == SpaceState.PHANTOM) return "";
+        final CharSequence textBeforeCursor = mConnection.getCachedTextBeforeCursor(SMART_TOUCH_MAX_WORD_LENGTH + 1);
+        if (textBeforeCursor == null) return null;
+        int start = textBeforeCursor.length();
+        while (start > 0) {
+            final int codePoint = Character.codePointBefore(textBeforeCursor, start);
+            if (!Character.isLetter(codePoint)) break;
+            start -= Character.charCount(codePoint);
+        }
+        if (textBeforeCursor.length() - start > SMART_TOUCH_MAX_WORD_LENGTH) return null;
+        return textBeforeCursor.subSequence(start, textBeforeCursor.length());
     }
 
     String getWordAtCursor(final SettingsValues settingsValues, final String currentKeyboardScript) {

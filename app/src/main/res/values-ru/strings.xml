@@ -404,6 +404,12 @@
     <string name="shift_removes_autospace_summary">Нажатие \"Shift\" убирает запланированный автоматический пробел</string>
     <string name="autospace_before_gesture_typing">Пробел автоматически перед набором слова жестами</string>
     <string name="backspace_reverts_autocorrect">Нажатие Backspace отменяет автоисправление</string>
+    <string name="smart_touch_targets">Умные зоны нажатия</string>
+    <string name="smart_touch_targets_summary">При нажатии между клавишами выбирать букву, подходящую к набираемому слову</string>
+    <string name="smart_touch_strength">Сила умных зон нажатия</string>
+    <string name="smart_touch_strength_weak">мягко</string>
+    <string name="smart_touch_strength_medium">сбалансированно</string>
+    <string name="smart_touch_strength_strong">сильно</string>
     <string name="timestamp_format_title">Формат ключа временной метки</string>
     <string name="subtype_dag">Дагбани</string>
     <string name="subtype_st">Сесото</string>

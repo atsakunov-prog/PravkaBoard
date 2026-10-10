@@ -68,6 +68,9 @@ fun TextCorrectionScreen(
         if (autocorrectEnabled) Settings.PREF_AUTOCORRECT_CAPITALIZED_SUGGESTION else null,
         if (autocorrectEnabled) Settings.PREF_AUTO_CORRECT_CONFIDENCE else null,
         if (autocorrectEnabled) Settings.PREF_BACKSPACE_REVERTS_AUTOCORRECT else null,
+        Settings.PREF_SMART_TOUCH_TARGETS,
+        if (prefs.getBoolean(Settings.PREF_SMART_TOUCH_TARGETS, Defaults.PREF_SMART_TOUCH_TARGETS))
+            Settings.PREF_SMART_TOUCH_STRENGTH else null,
         Settings.PREF_AUTO_CAP,
         R.string.settings_category_space,
         Settings.PREF_KEY_USE_DOUBLE_SPACE_PERIOD,
@@ -154,6 +157,26 @@ fun createCorrectionSettings(context: Context) = listOf(
     },
     Setting(context, Settings.PREF_BACKSPACE_REVERTS_AUTOCORRECT, R.string.backspace_reverts_autocorrect) {
         SwitchPreference(it, Defaults.PREF_BACKSPACE_REVERTS_AUTOCORRECT)
+    },
+    Setting(context, Settings.PREF_SMART_TOUCH_TARGETS,
+        R.string.smart_touch_targets, R.string.smart_touch_targets_summary
+    ) {
+        SwitchPreference(it, Defaults.PREF_SMART_TOUCH_TARGETS)
+    },
+    Setting(context, Settings.PREF_SMART_TOUCH_STRENGTH, R.string.smart_touch_strength) { setting ->
+        SliderPreference(
+            name = setting.title,
+            key = setting.key,
+            default = Defaults.PREF_SMART_TOUCH_STRENGTH,
+            range = 0f..1f,
+            description = {
+                when (it) {
+                    in 0f..0.3f -> stringResource(R.string.smart_touch_strength_weak)
+                    in 0f..0.7f -> stringResource(R.string.smart_touch_strength_medium)
+                    else -> stringResource(R.string.smart_touch_strength_strong)
+                }
+            }
+        )
     },
     Setting(context, Settings.PREF_AUTO_CAP,
         R.string.auto_cap, R.string.auto_cap_summary

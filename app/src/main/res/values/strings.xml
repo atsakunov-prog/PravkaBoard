@@ -152,6 +152,18 @@
     <string name="auto_correct_capitalized_suggestions_description">After pressing shift to capitalize suggestions, auto-correct will trigger</string>
     <!-- Option to undo auto correction with backspace -->
     <string name="backspace_reverts_autocorrect">Backspace reverts autocorrect</string>
+    <!-- Option to choose the intended key using the letters typed before when touching near the border between letter keys -->
+    <string name="smart_touch_targets">Smart touch targets</string>
+    <!-- Description for smart_touch_targets -->
+    <string name="smart_touch_targets_summary">When touching between keys, prefer the letter that fits the word being typed</string>
+    <!-- Option to set how strongly smart_touch_targets corrects touches -->
+    <string name="smart_touch_strength">Smart touch target strength</string>
+    <!-- Description for weak smart_touch_strength values, keys are rarely exchanged -->
+    <string name="smart_touch_strength_weak">gentle</string>
+    <!-- Description for medium smart_touch_strength values -->
+    <string name="smart_touch_strength_medium">balanced</string>
+    <!-- Description for strong smart_touch_strength values, for very imprecise typing -->
+    <string name="smart_touch_strength_strong">strong</string>
     <!-- Option to disable auto correction. -->
     <string name="auto_correction_threshold_mode_off">Off</string> <!-- todo: use it or remove it -->
     <!-- Option to suggest auto correction suggestions modestly. Auto-corrects only to a word which has small edit distance from typed word. -->

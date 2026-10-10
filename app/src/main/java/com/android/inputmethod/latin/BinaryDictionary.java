@@ -429,6 +429,28 @@ public final class BinaryDictionary extends Dictionary {
                 getWordProperty(word, isBeginningOfSentence[0]), nextToken);
     }
 
+    public interface WordCallback {
+        void onWord(String word, int probability);
+    }
+
+    /**
+     * Iterates all words with their unigram probability. Much faster than {@link #getNextWordProperty},
+     * as n-grams and shortcuts are not read.
+     */
+    public void forEachWord(final WordCallback callback) {
+        final int[] codePoints = new int[DICTIONARY_MAX_WORD_LENGTH];
+        final boolean[] isBeginningOfSentence = new boolean[1];
+        int token = 0;
+        do {
+            Arrays.fill(codePoints, 0);
+            token = getNextWordNative(mNativeDict, token, codePoints, isBeginningOfSentence);
+            final String word = StringUtils.getStringFromNullTerminatedCodePointArray(codePoints);
+            if (!word.isEmpty()) {
+                callback.onWord(word, getProbabilityNative(mNativeDict, StringUtils.toCodePointArray(word)));
+            }
+        } while (token != 0);
+    }
+
     // Add a unigram entry to binary dictionary with unigram attributes in native code.
     public boolean addUnigramEntry(final String word, final int probability,
             final String shortcutTarget, final int shortcutProbability,

@@ -46,6 +46,7 @@ import helium314.keyboard.keyboard.emoji.EmojiPalettesView;
 import helium314.keyboard.keyboard.emoji.EmojiSearchActivity;
 import helium314.keyboard.keyboard.internal.KeyboardIconsSet;
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode;
+import helium314.keyboard.keyboard.smarttouch.SmartTouch;
 import helium314.keyboard.latin.common.InsetsOutlineProvider;
 import helium314.keyboard.dictionarypack.DictionaryPackConstants;
 import helium314.keyboard.event.Event;
@@ -543,6 +544,7 @@ public class LatinIME extends InputMethodService implements
         mRichImm = RichInputMethodManager.getInstance();
         AudioAndHapticFeedbackManager.init(this);
         AccessibilityUtils.init(this);
+        SmartTouch.init(this, () -> mInputLogic.getWordBeforeCursorForSmartTouch(mSettings.getCurrent()));
         mStatsUtilsManager.onCreate(this, mDictionaryFacilitator);
         mDisplayContext = KtxKt.getDisplayContext(this);
         KeyboardSwitcher.init(this);
