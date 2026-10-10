@@ -59,7 +59,14 @@ interface Colors {
     fun setBackground(view: View, color: ColorType)
 
     /** returns a colored drawable selected from [attr], which must contain using R.styleable.KeyboardView_* */
+    /** PravkaBoard: material of the bordered rounded keys, null keeps the flat xml drawables */
+    val keyMaterial: KeyMaterial? get() = null
+
     fun selectAndColorDrawable(attr: TypedArray, color: ColorType): Drawable {
+        pravkaKeySkin(attr, color)?.let {
+            setColor(it, color)
+            return it
+        }
         val drawable = when (color) {
             KEY_BACKGROUND, MORE_SUGGESTIONS_WORD_BACKGROUND, ACTION_KEY_POPUP_KEYS_BACKGROUND, POPUP_KEYS_BACKGROUND ->
                 attr.getDrawable(R.styleable.KeyboardView_keyBackground)
@@ -79,6 +86,22 @@ interface Colors {
 
         setColor(drawable, color)
         return drawable
+    }
+
+    /** the Pravka key for the keys that use the bordered rounded drawables, colored the same way */
+    private fun pravkaKeySkin(attr: TypedArray, color: ColorType): Drawable? {
+        val material = keyMaterial ?: return null
+        val index = when (color) {
+            KEY_BACKGROUND, ACTION_KEY_BACKGROUND -> R.styleable.KeyboardView_keyBackground
+            FUNCTIONAL_KEY_BACKGROUND -> R.styleable.KeyboardView_functionalKeyBackground
+            SPACE_BAR_BACKGROUND -> R.styleable.KeyboardView_spacebarBackground
+            else -> return null
+        }
+        return when (attr.getResourceId(index, 0)) {
+            R.drawable.btn_keyboard_key_rounded_base_border -> KeySkin.stateList(attr.resources, material)
+            R.drawable.btn_keyboard_key_functional_rounded_base_border -> KeySkin.stateList(attr.resources, material.functional)
+            else -> null
+        }
     }
 }
 
@@ -377,6 +400,7 @@ class DefaultColors (
     private var keyboardBackground: Drawable? = null,
     /** icon color on the action key, if the theme sets one (white or gray otherwise) */
     private val actionKeyIcon: Int? = null,
+    override val keyMaterial: KeyMaterial? = null,
 ) : Colors {
     private val navBar: Int
     /** brightened or darkened variant of [background], to be used if exact background color would be

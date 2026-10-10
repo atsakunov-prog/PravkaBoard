@@ -801,10 +801,10 @@ New dictionary:
     <string name="theme_name_sand" tools:keep="@string/theme_name_sand">Sand</string>
     <!-- Theme name for violette theme -->
     <string name="theme_name_violette" tools:keep="@string/theme_name_violette">Violette</string>
-    <!-- Theme name for the light theme in the colors of the Pravka app -->
+    <!-- Theme name for the dark theme in the look of the Pravka app -->
     <string name="theme_name_pravka" tools:keep="@string/theme_name_pravka">Pravka</string>
-    <!-- Theme name for the dark theme in the colors of the Pravka app -->
-    <string name="theme_name_pravka_night" tools:keep="@string/theme_name_pravka_night">Pravka Night</string>
+    <!-- Theme name for the light paper variant of the Pravka theme -->
+    <string name="theme_name_pravka_paper" tools:keep="@string/theme_name_pravka_paper">Pravka Paper</string>
     <!-- Theme name for user-defined theme -->
     <string name="theme_name_user" tools:keep="@string/theme_name_user">User-Defined</string>
     <!-- Theme name for user-defined theme night mode theme -->

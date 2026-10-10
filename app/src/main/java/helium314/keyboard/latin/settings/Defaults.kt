@@ -44,11 +44,11 @@ object Defaults {
     }
 
     private const val DEFAULT_SIZE_SCALE = 1.0f // 100%
-    // PravkaBoard: rounded keys with borders in the Pravka colors
+    // PravkaBoard: rounded keys with borders in the Pravka look, dark day and night like the Pravka app
     const val PREF_THEME_STYLE = KeyboardTheme.STYLE_ROUNDED
     fun PREF_ICON_STYLE(prefs: SharedPreferences) = prefs.getString(Settings.PREF_THEME_STYLE, PREF_THEME_STYLE)!!
     const val PREF_THEME_COLORS = KeyboardTheme.THEME_PRAVKA
-    const val PREF_THEME_COLORS_NIGHT = KeyboardTheme.THEME_PRAVKA_NIGHT
+    const val PREF_THEME_COLORS_NIGHT = KeyboardTheme.THEME_PRAVKA
     const val PREF_THEME_KEY_BORDERS = true
     @JvmField
     val PREF_THEME_DAY_NIGHT = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q

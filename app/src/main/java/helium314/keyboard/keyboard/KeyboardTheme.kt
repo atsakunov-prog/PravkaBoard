@@ -20,6 +20,8 @@ import helium314.keyboard.latin.common.ColorType
 import helium314.keyboard.latin.common.Colors
 import helium314.keyboard.latin.common.DefaultColors
 import helium314.keyboard.latin.common.DynamicColors
+import helium314.keyboard.latin.common.KeyMaterial
+import helium314.keyboard.latin.common.PravkaLight
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.ResourceUtils
@@ -65,11 +67,12 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
         const val THEME_PINK = "pink"
         const val THEME_SAND = "sand"
         const val THEME_VIOLETTE = "violette"
-        // PravkaBoard: the palette of the Pravka app, warm paper and orange
+        // PravkaBoard: the look of the Pravka app, which is always dark, and a light paper variant of it
         const val THEME_PRAVKA = "pravka"
-        const val THEME_PRAVKA_NIGHT = "pravka_night"
+        const val THEME_PRAVKA_PAPER = "pravka_paper"
+        private const val PRAVKA_LIGHT = 0.5f
         fun getAvailableDefaultColors(prefs: SharedPreferences, isNight: Boolean) = listOfNotNull(
-            if (!isNight) THEME_PRAVKA else null, THEME_PRAVKA_NIGHT,
+            THEME_PRAVKA, if (!isNight) THEME_PRAVKA_PAPER else null,
             if (!isNight) THEME_LIGHT else null, THEME_DARK,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) THEME_DYNAMIC else null,
             if (prefs.getString(Settings.PREF_THEME_STYLE, Defaults.PREF_THEME_STYLE) == STYLE_HOLO) THEME_HOLO_WHITE else null,
@@ -156,34 +159,40 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) DynamicColors(context, themeStyle, hasBorders, backgroundImage)
                     else getThemeColors(THEME_LIGHT, themeStyle, context, prefs, isNight)
                 }
+                // colors of Pravka 4.0 (docs/design/redesign-4/DESIGN.md in the Pravka repository): background, warm dark glass,
+                // Pravka ink on the functional keys, the orange of the floating "П" button on the action key
                 THEME_PRAVKA -> DefaultColors(
                     themeStyle,
                     hasBorders,
                     accent = "#EA580C".toColorInt(),
-                    background = "#ECE5D6".toColorInt(),
-                    keyBackground = "#FEFCF6".toColorInt(),
-                    functionalKey = "#DCD3C1".toColorInt(),
-                    spaceBar = "#FEFCF6".toColorInt(),
-                    keyText = "#241F19".toColorInt(),
-                    keyHintText = "#8A8172".toColorInt(),
-                    suggestionText = "#241F19".toColorInt(),
-                    spaceBarText = "#9A9183".toColorInt(),
-                    keyboardBackground = backgroundImage,
+                    background = "#100F0D".toColorInt(),
+                    keyBackground = "#2D261F".toColorInt(),
+                    functionalKey = "#3E2414".toColorInt(),
+                    spaceBar = "#2D261F".toColorInt(),
+                    keyText = "#F0EADF".toColorInt(),
+                    keyHintText = "#A98F72".toColorInt(),
+                    suggestionText = "#F0EADF".toColorInt(),
+                    spaceBarText = "#9C8670".toColorInt(),
+                    gesture = "#F5925A".toColorInt(),
+                    keyboardBackground = backgroundImage ?: PravkaLight("#100F0D".toColorInt(), PRAVKA_LIGHT),
+                    actionKeyIcon = "#FFF6EA".toColorInt(),
+                    keyMaterial = KeyMaterial.GLASS,
                 )
-                THEME_PRAVKA_NIGHT -> DefaultColors(
+                THEME_PRAVKA_PAPER -> DefaultColors(
                     themeStyle,
                     hasBorders,
-                    accent = "#FB923C".toColorInt(),
-                    background = "#16130F".toColorInt(),
-                    keyBackground = "#332D25".toColorInt(),
-                    functionalKey = "#25211B".toColorInt(),
-                    spaceBar = "#332D25".toColorInt(),
-                    keyText = "#ECE5D8".toColorInt(),
-                    keyHintText = "#8F8574".toColorInt(),
-                    suggestionText = "#ECE5D8".toColorInt(),
-                    spaceBarText = "#8F8574".toColorInt(),
+                    accent = "#EA580C".toColorInt(),
+                    background = "#E6DDCB".toColorInt(),
+                    keyBackground = "#F7F1E6".toColorInt(),
+                    functionalKey = "#D8CDB8".toColorInt(),
+                    spaceBar = "#F7F1E6".toColorInt(),
+                    keyText = "#2A1E12".toColorInt(),
+                    keyHintText = "#8A7660".toColorInt(),
+                    suggestionText = "#2A1E12".toColorInt(),
+                    spaceBarText = "#9C8670".toColorInt(),
                     keyboardBackground = backgroundImage,
-                    actionKeyIcon = "#381603".toColorInt(),
+                    actionKeyIcon = "#FFF6EA".toColorInt(),
+                    keyMaterial = KeyMaterial.CREAM,
                 )
                 THEME_LIGHT -> DefaultColors(
                     themeStyle,
