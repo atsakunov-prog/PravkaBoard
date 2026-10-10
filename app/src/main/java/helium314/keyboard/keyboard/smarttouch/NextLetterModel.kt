@@ -120,8 +120,7 @@ class NextLetterModel private constructor(
     }
 
     /**
-     * Collects n-gram counts from dictionary words. To limit memory use, only add the more frequent
-     * words of large dictionaries, this hardly affects prediction quality.
+     * Collects n-gram counts from dictionary words, weighted by their frequency.
      */
     class Builder(private val order: Int = DEFAULT_ORDER) {
         init { require(order in 1..MAX_ORDER) }
@@ -243,7 +242,7 @@ class NextLetterModel private constructor(
     }
 
     companion object {
-        const val DEFAULT_ORDER = 6
+        const val DEFAULT_ORDER = 7
         private const val MAX_ORDER = 8
         private const val WORD_START = 0
         private const val RADIX = 256 // maximum alphabet size including the word start marker

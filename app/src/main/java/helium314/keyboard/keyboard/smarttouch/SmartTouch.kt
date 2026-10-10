@@ -35,11 +35,11 @@ import kotlin.math.ln
 object SmartTouch : KeyDetector.HitKeyCorrector {
     private const val TAG = "SmartTouch"
     private const val MAX_WORD_LENGTH = 32
-    /** only the most frequent words are used, rare words add a lot of memory but hardly any accuracy */
-    private const val MAX_DICTIONARY_WORDS = 100_000
+    /** limits memory use for huge dictionaries, a typical one with 200k words needs ~7 MB */
+    private const val MAX_DICTIONARY_WORDS = 500_000
     private const val RETRY_DELAY_MILLIS = 60_000L
     private const val CACHE_FOLDER = "smart_touch"
-    private const val CACHE_VERSION = 1
+    private const val CACHE_VERSION = 2
 
     private val models = ConcurrentHashMap<Locale, NextLetterModel>()
     private val loading: MutableSet<Locale> = Collections.newSetFromMap(ConcurrentHashMap())
@@ -203,7 +203,7 @@ object SmartTouch : KeyDetector.HitKeyCorrector {
     }
 
     private fun buildModel(dict: BinaryDictionary): NextLetterModel {
-        // only use the most frequent words: find the lowest probability that still fits
+        // with too many words, only use the most frequent: find the lowest probability that still fits
         val histogram = IntArray(256)
         dict.forEachWord { _, probability -> if (probability in 0..255) histogram[probability]++ }
         var threshold = 255
