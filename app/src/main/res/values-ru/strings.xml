@@ -440,6 +440,11 @@
     <string name="update_error_timeout">Сервер не ответил</string>
     <string name="update_error_wrong_apk">Скачался не тот файл</string>
     <string name="update_error_branch_changed">Пока качали, в ветке сменилась сборка — проверь ещё раз</string>
+    <string name="gesture_library_download">Включить свайп</string>
+    <string name="gesture_library_download_summary">Скачать библиотеку Google для набора жестами</string>
+    <string name="gesture_library_download_button">Скачать</string>
+    <string name="gesture_library_download_message">Набор жестами работает только на закрытой библиотеке Google, поэтому положить её в приложение нельзя. Клавиатура скачает её с GitHub (оттуда же, куда ссылается HeliBoard), сверит контрольную сумму с эталонной и перезапустится. Чужой файл она не поставит.</string>
+    <string name="gesture_library_download_wrong_file">Контрольная сумма скачанного файла не совпала, ничего не установлено</string>
     <string name="update_error_other_key">Эта сборка подписана другим ключом — поверх текущей Android её не поставит</string>
     <string name="timestamp_format_title">Формат ключа временной метки</string>
     <string name="subtype_dag">Дагбани</string>

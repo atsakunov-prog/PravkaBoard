@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -16,6 +17,7 @@ import helium314.keyboard.latin.R
 import helium314.keyboard.latin.common.FileUtils
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.ChecksumCalculator
+import helium314.keyboard.latin.utils.GestureLibrary
 import helium314.keyboard.latin.utils.JniUtils
 import helium314.keyboard.latin.utils.protectedPrefs
 import helium314.keyboard.settings.Setting
@@ -35,16 +37,7 @@ fun LoadGestureLibPreference(setting: Setting) {
     val prefs = ctx.protectedPrefs()
     val abi = Build.SUPPORTED_ABIS[0]
     val libFile = File(ctx.filesDir?.absolutePath + File.separator + JniUtils.JNI_LIB_IMPORT_FILE_NAME)
-    fun renameToLibFileAndRestart(file: File, checksum: String) {
-        libFile.setWritable(true)
-        libFile.delete()
-        // store checksum in default preferences (see JniUtils)
-        prefs.edit(commit = true) { putString(Settings.PREF_LIBRARY_CHECKSUM, checksum) }
-        file.copyTo(libFile)
-        libFile.setReadOnly()
-        file.delete()
-        Runtime.getRuntime().exit(0) // exit will restart the app, so library will be loaded
-    }
+    fun renameToLibFileAndRestart(file: File, checksum: String) = GestureLibrary.install(ctx, file, checksum)
     var tempFilePath: String? by rememberSaveable { mutableStateOf(null) }
     val launcher = filePicker { uri ->
         val tmpfile = File(ctx.filesDir.absolutePath + File.separator + "tmplib")
@@ -106,5 +99,31 @@ fun LoadGestureLibPreference(setting: Setting) {
                 val tempFile = File(tempFilePath!!)
                 renameToLibFileAndRestart(tempFile, ChecksumCalculator.checksum(tempFile) ?: "")
             }
+        )
+}
+
+/** Shown while gesture typing is not available: downloads the library with a single tap. */
+@Composable
+fun DownloadGestureLibPreference() {
+    val ctx = LocalContext.current
+    val state by GestureLibrary.state.collectAsState()
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    Preference(
+        name = stringResource(R.string.gesture_library_download),
+        description = when {
+            state.progress >= 0 -> stringResource(R.string.update_downloading, state.progress)
+            state.error.isNotEmpty() -> stringResource(R.string.update_error, state.error)
+            else -> stringResource(R.string.gesture_library_download_summary)
+        },
+        onClick = { if (state.progress < 0) showDialog = true },
+        icon = R.drawable.ic_settings_gesture
+    )
+    if (showDialog)
+        ConfirmationDialog(
+            onDismissRequest = { showDialog = false },
+            onConfirmed = { GestureLibrary.downloadInBackground(ctx) },
+            confirmButtonText = stringResource(R.string.gesture_library_download_button),
+            title = { Text(stringResource(R.string.gesture_library_download)) },
+            content = { Text(stringResource(R.string.gesture_library_download_message)) },
         )
 }

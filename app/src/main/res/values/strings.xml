@@ -199,6 +199,12 @@
     <string name="update_error_timeout">Server did not answer</string>
     <string name="update_error_wrong_apk">The downloaded file is not this keyboard</string>
     <string name="update_error_branch_changed">The build changed while downloading, check again</string>
+    <!-- Option to download the gesture typing library, shown while gesture typing is not available -->
+    <string name="gesture_library_download">Enable gesture typing</string>
+    <string name="gesture_library_download_summary">Download Google\'s gesture typing library</string>
+    <string name="gesture_library_download_button">Download</string>
+    <string name="gesture_library_download_message">Gesture typing works only with Google\'s closed source library, so it can\'t be part of the app. The keyboard downloads it from GitHub (the source the HeliBoard readme links to), compares its checksum with the expected one and restarts. Any other file is not installed.</string>
+    <string name="gesture_library_download_wrong_file">The checksum of the downloaded file does not match, nothing was installed</string>
     <string name="update_error_other_key">This build is signed with another key, Android will not install it over the current version</string>
     <!-- Option to disable auto correction. -->
     <string name="auto_correction_threshold_mode_off">Off</string> <!-- todo: use it or remove it -->
