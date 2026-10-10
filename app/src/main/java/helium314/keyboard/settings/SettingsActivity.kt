@@ -35,6 +35,7 @@ import helium314.keyboard.latin.R
 import helium314.keyboard.latin.common.FileUtils
 import helium314.keyboard.latin.define.DebugFlags
 import helium314.keyboard.latin.settings.Settings
+import helium314.keyboard.latin.utils.AppUpdater
 import helium314.keyboard.latin.utils.BackButton
 import helium314.keyboard.latin.utils.DeviceProtectedUtils
 import helium314.keyboard.latin.utils.ExecutorUtils
@@ -150,6 +151,7 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
             }
         }
 
+        openUpdatesIfRequested(intent)
         if (intent?.action == Intent.ACTION_VIEW) {
             intent?.data?.let {
                 cachedDictionaryFile.delete()
@@ -160,6 +162,17 @@ open class SettingsActivity : ComponentActivity(), SharedPreferences.OnSharedPre
         }
 
         enableEdgeToEdge()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openUpdatesIfRequested(intent)
+    }
+
+    // tap on the "update available" notification
+    private fun openUpdatesIfRequested(intent: Intent?) {
+        if (intent?.getBooleanExtra(AppUpdater.EXTRA_OPEN_UPDATES, false) == true)
+            SettingsDestination.navigateTo(SettingsDestination.Updates)
     }
 
     override fun onStart() {

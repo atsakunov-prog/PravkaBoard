@@ -47,6 +47,7 @@ import helium314.keyboard.keyboard.emoji.EmojiSearchActivity;
 import helium314.keyboard.keyboard.internal.KeyboardIconsSet;
 import helium314.keyboard.keyboard.internal.keyboard_parser.floris.KeyCode;
 import helium314.keyboard.keyboard.smarttouch.SmartTouch;
+import helium314.keyboard.latin.utils.AppUpdater;
 import helium314.keyboard.latin.common.InsetsOutlineProvider;
 import helium314.keyboard.dictionarypack.DictionaryPackConstants;
 import helium314.keyboard.event.Event;
@@ -856,6 +857,7 @@ public class LatinIME extends InputMethodService implements
         super.onStartInputView(editorInfo, restarting);
 
         setGestureDataGatheringMode(editorInfo, restarting);
+        AppUpdater.onKeyboardShown(this);
 
         mDictionaryFacilitator.onStartInput();
         // Switch to the null consumer to handle cases leading to early exit below, for which we

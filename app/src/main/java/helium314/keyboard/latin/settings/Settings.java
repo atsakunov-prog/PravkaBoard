@@ -83,6 +83,9 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     public static final String PREF_BACKSPACE_REVERTS_AUTOCORRECT = "backspace_reverts_autocorrect";
     public static final String PREF_SMART_TOUCH_TARGETS = "smart_touch_targets";
     public static final String PREF_SMART_TOUCH_STRENGTH = "smart_touch_strength";
+    public static final String PREF_UPDATE_AUTO = "update_auto";
+    public static final String PREF_UPDATE_MOBILE = "update_mobile";
+    public static final String PREF_UPDATE_BRANCH = "update_branch";
     public static final String PREF_AUTOCORRECT_CAPITALIZED_SUGGESTION = "autocorrect_capitalized_suggestion";
     public static final String PREF_CENTER_SUGGESTION_TEXT_TO_ENTER = "center_suggestion_text_to_enter";
     public static final String PREF_SHOW_SUGGESTIONS = "show_suggestions";

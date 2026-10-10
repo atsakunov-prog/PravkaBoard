@@ -8,6 +8,14 @@ plugins {
     kotlin("plugin.compose") version "2.3.20"
 }
 
+// PravkaBoard: CI passes -PbuildNumber=<run number> and -PbuildBranch=<branch>, see build-apk.yml.
+// The in-app updater compares versionCode, and only takes builds of its own branch.
+val ciBuildNumber = (project.findProperty("buildNumber") as String?)?.toIntOrNull()
+val buildBranch = (project.findProperty("buildBranch") as String?)?.takeIf { it.isNotBlank() }
+    ?: rootProject.file(".git/HEAD").takeIf { it.isFile }?.readText()?.trim()
+        ?.takeIf { it.startsWith("ref: refs/heads/") }?.removePrefix("ref: refs/heads/")
+    ?: ""
+
 android {
     compileSdk = 36
 
@@ -15,8 +23,10 @@ android {
         applicationId = "helium314.keyboard"
         minSdk = 21
         targetSdk = 36
-        versionCode = 4006
-        versionName = "4.0-dev1"
+        // +10000 keeps CI builds above upstream's 4006 and above the earlier PravkaBoard builds
+        versionCode = ciBuildNumber?.plus(10000) ?: 4006
+        versionName = "4.0-pravka" + (ciBuildNumber?.let { ".$it" } ?: "")
+        buildConfigField("String", "BUILD_BRANCH", "\"$buildBranch\"")
         ndk {
             abiFilters.clear()
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))

@@ -22,6 +22,7 @@ import helium314.keyboard.latin.utils.SubtypeLocaleUtils.displayName
 import helium314.keyboard.latin.utils.SubtypeSettings
 import helium314.keyboard.latin.utils.NextScreenIcon
 import helium314.keyboard.settings.SearchSettingsScreen
+import helium314.keyboard.settings.SettingsDestination
 import helium314.keyboard.latin.utils.Theme
 import helium314.keyboard.settings.initPreview
 import helium314.keyboard.settings.preferences.Preference
@@ -107,6 +108,12 @@ fun MainSettingsScreen(
                     name = stringResource(R.string.settings_screen_advanced),
                     onClick = onClickAdvanced,
                     icon = R.drawable.ic_settings_advanced
+                ) { NextScreenIcon() }
+                Preference(
+                    name = stringResource(R.string.updates_title),
+                    description = updatesSummary(),
+                    onClick = { SettingsDestination.navigateTo(SettingsDestination.Updates) },
+                    icon = R.drawable.ic_settings_updates
                 ) { NextScreenIcon() }
                 Preference(
                     name = stringResource(R.string.settings_screen_about),

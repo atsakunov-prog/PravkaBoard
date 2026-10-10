@@ -164,6 +164,42 @@
     <string name="smart_touch_strength_medium">balanced</string>
     <!-- Description for strong smart_touch_strength values, for very imprecise typing -->
     <string name="smart_touch_strength_strong">strong</string>
+    <!-- Title of the settings screen and notification channel for self-updates from GitHub -->
+    <string name="updates_title">Updates</string>
+    <string name="update_installed">Installed version</string>
+    <!-- Summary on the main settings screen -->
+    <string name="update_installed_version">Installed: %s</string>
+    <string name="update_available">Build %s is available</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_never_checked">Not checked yet</string>
+    <string name="update_latest">This is the newest build</string>
+    <!-- %1$s is the version, %2$s the build time -->
+    <string name="update_found">Build %1$s from %2$s</string>
+    <!-- %1$s is the version, %2$s a git branch -->
+    <string name="update_other_branch">The newest build %1$s comes from branch \"%2$s\", not from ours, so it is not offered</string>
+    <string name="update_checked">Checked %s</string>
+    <string name="update_error">Failed: %s</string>
+    <string name="update_download">Download %s</string>
+    <string name="update_downloading">Downloading… %d%%</string>
+    <string name="update_install">Install %s</string>
+    <string name="update_allow_install">First allow the keyboard to install updates, then tap again</string>
+    <string name="update_install_failed">Installer did not open: %s</string>
+    <string name="update_auto">Check daily and download automatically</string>
+    <string name="update_auto_summary">When the keyboard opens. Downloads only over Wi-Fi, unless allowed below</string>
+    <string name="update_mobile">Download over mobile data too</string>
+    <string name="update_branch">Update from branch</string>
+    <!-- %s is a git branch -->
+    <string name="update_branch_info">Empty means the branch this build was made from: %s. Every branch publishes its builds to apk-builds, builds of other branches are shown, but not installed. After moving work to another branch, enter its name here.</string>
+    <string name="update_notification_found">Build %s is available</string>
+    <string name="update_notification_found_text">Tap to download and install</string>
+    <string name="update_notification_ready">Update %s is ready</string>
+    <string name="update_notification_ready_text">Tap to install</string>
+    <string name="update_error_no_network">No network</string>
+    <string name="update_error_timeout">Server did not answer</string>
+    <string name="update_error_wrong_apk">The downloaded file is not this keyboard</string>
+    <string name="update_error_branch_changed">The build changed while downloading, check again</string>
+    <string name="update_error_other_key">This build is signed with another key, Android will not install it over the current version</string>
     <!-- Option to disable auto correction. -->
     <string name="auto_correction_threshold_mode_off">Off</string> <!-- todo: use it or remove it -->
     <!-- Option to suggest auto correction suggestions modestly. Auto-corrects only to a word which has small edit distance from typed word. -->

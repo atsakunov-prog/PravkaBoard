@@ -69,6 +69,9 @@ object Defaults {
     const val PREF_BACKSPACE_REVERTS_AUTOCORRECT = true
     const val PREF_SMART_TOUCH_TARGETS = true
     const val PREF_SMART_TOUCH_STRENGTH = 0.4f
+    const val PREF_UPDATE_AUTO = true
+    const val PREF_UPDATE_MOBILE = false
+    const val PREF_UPDATE_BRANCH = ""
     const val PREF_AUTOCORRECT_CAPITALIZED_SUGGESTION = true
     const val PREF_CENTER_SUGGESTION_TEXT_TO_ENTER = false
     const val PREF_SHOW_SUGGESTIONS = true
