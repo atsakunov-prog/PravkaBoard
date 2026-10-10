@@ -34,6 +34,19 @@ android {
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
 
+    // PravkaBoard: ONE committed keystore for all builds (the same as on branch claude/pravka-integration),
+    // so every build installs over the previous one and the in-app updater works. The per-runner
+    // debug key made every CI build unable to install over the previous one. This is a
+    // personal-sideload signing key, not a Play key.
+    signingConfigs {
+        create("shared") {
+            storeFile = rootProject.file("keystore/pravkaboard.jks")
+            storePassword = "pravkaboard-keystore-2026"
+            keyAlias = "pravkaboard"
+            keyPassword = "pravkaboard-keystore-2026"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -53,6 +66,7 @@ android {
             isMinifyEnabled = true
             isJniDebuggable = false
             applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("shared")
         }
         create("runTests") { // build variant for running tests on CI that skips tests known to fail
             isMinifyEnabled = false
