@@ -1,0 +1,6 @@
+versionName=4.0-pravka.28
+versionCode=10028
+apk=pravkaboard-debug.apk
+commit=e8361891e703cdbc6d99a78b7fa646b2f33704da
+branch=ccr-de51b1f7-43im53
+builtAt=2026-10-10T21:58Z
