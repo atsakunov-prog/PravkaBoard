@@ -12,6 +12,7 @@ import android.graphics.Paint;
 import android.graphics.Paint.Align;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -73,7 +74,7 @@ public class GestureFloatingTextDrawingPreview extends AbstractDrawingPreview {
             mPaint.setAntiAlias(true);
             mPaint.setTextAlign(Align.CENTER);
             mPaint.setTextSize(mGesturePreviewTextSize);
-            mPaint.setTypeface(KeyboardTypeface.customTypeface());
+            mPaint.setTypeface(KeyboardTypeface.resolve(null, Typeface.DEFAULT));
             mPaint.setColor(mGesturePreviewTextColor);
             return mPaint;
         }

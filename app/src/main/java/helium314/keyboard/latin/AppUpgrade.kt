@@ -3,6 +3,7 @@ package helium314.keyboard.latin
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.core.content.edit
 import helium314.keyboard.compat.isDeviceLocked
 import helium314.keyboard.compat.isUserLocked
@@ -86,7 +87,10 @@ private object AppUpgrade {
         val oldVersion = prefs.getInt(Settings.PREF_VERSION_CODE, 0)
         if (oldVersion == 0) {
             // fresh install -> no need to upgrade, as this does things like keeping old defaults which is on wanted on actual upgrade
-            prefs.edit { putInt(Settings.PREF_VERSION_CODE, BuildConfig.VERSION_CODE) }
+            prefs.edit {
+                putInt(Settings.PREF_VERSION_CODE, BuildConfig.VERSION_CODE)
+                putBoolean(PRAVKA_LOOK_APPLIED, true) // the defaults are the Pravka look already
+            }
             return
         }
         // clear extracted dictionaries, in case updated version contains newer ones
@@ -709,9 +713,32 @@ private object AppUpgrade {
             }
         }
         upgradeToolbarPrefs(prefs)
+        applyPravkaLookOnce(prefs)
         LayoutUtilsCustom.onLayoutFileChanged() // just to be sure
         prefs.edit { putInt(Settings.PREF_VERSION_CODE, BuildConfig.VERSION_CODE) }
     }
+
+    /**
+     * PravkaBoard: the Pravka look is the default, but defaults don't reach a theme that was ever chosen in
+     * the settings, so updated installs kept their old look. Switch them once; later choices stay.
+     */
+    private fun applyPravkaLookOnce(prefs: SharedPreferences) {
+        if (prefs.getBoolean(PRAVKA_LOOK_APPLIED, false)) return
+        prefs.edit {
+            putString(Settings.PREF_THEME_STYLE, Defaults.PREF_THEME_STYLE)
+            putBoolean(Settings.PREF_THEME_KEY_BORDERS, Defaults.PREF_THEME_KEY_BORDERS)
+            putString(Settings.PREF_THEME_COLORS, Defaults.PREF_THEME_COLORS)
+            putString(Settings.PREF_THEME_COLORS_NIGHT, Defaults.PREF_THEME_COLORS_NIGHT)
+            putBoolean(Settings.PREF_THEME_DAY_NIGHT, Defaults.PREF_THEME_DAY_NIGHT)
+            remove(Settings.PREF_POPUP_KEYS_HINT_ORDER)
+            remove(Settings.PREF_TOOLBAR_KEYS)
+            remove(Settings.PREF_AUTO_SHOW_TOOLBAR)
+            remove(Settings.PREF_AUTO_HIDE_TOOLBAR)
+            putBoolean(PRAVKA_LOOK_APPLIED, true)
+        }
+    }
+
+    private const val PRAVKA_LOOK_APPLIED = "pravka_look_applied"
 
     // old variant for old folder structure
     private fun getCustomLayoutFile(layoutName: String, context: Context): File =

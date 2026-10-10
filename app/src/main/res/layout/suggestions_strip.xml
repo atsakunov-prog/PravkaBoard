@@ -27,10 +27,12 @@
             android:background="@drawable/toolbar_expand_key_background"
             style="?attr/suggestionWordStyle"
             android:contentDescription="@string/more_keys_strip_description" />
+        <!-- PravkaBoard: fillViewport lets a short row of toolbar keys spread over the whole width -->
         <HorizontalScrollView
             android:id="@+id/toolbar_container"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:fillViewport="true"
             android:scrollbarThumbHorizontal="@color/toolbar_scrollbar"
             android:visibility="gone">
             <LinearLayout

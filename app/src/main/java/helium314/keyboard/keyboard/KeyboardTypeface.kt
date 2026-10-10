@@ -4,6 +4,7 @@ package helium314.keyboard.keyboard
 
 import android.content.Context
 import android.graphics.Typeface
+import android.os.Build
 import android.widget.TextView
 import androidx.compose.ui.text.font.FontFamily
 import helium314.keyboard.latin.common.isEmoji
@@ -20,6 +21,40 @@ object KeyboardTypeface {
     private var cachedEmojiTypeface: Typeface? = null
     @Volatile
     private var emojiTypefaceLoaded = false
+
+    // PravkaBoard: without a font of the user's own, keys and suggestions are set in Golos Text, the font of the
+    // Pravka app, drawn for Cyrillic (OFL, assets/fonts/OFL-GolosText.txt). Roboto made the keyboard look dated.
+    private const val BUILT_IN_FONT = "fonts/golos_text.ttf"
+    private const val BUILT_IN_WEIGHT = 400
+    private const val BUILT_IN_BOLD_WEIGHT = 600
+    private var cachedBuiltIn: Typeface? = null
+    private var cachedBuiltInBold: Typeface? = null
+    @Volatile
+    private var builtInLoaded = false
+
+    // it's a variable font, the weights need font variation settings
+    private fun loadBuiltIn(context: Context, weight: Int): Typeface? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        return runCatching {
+            Typeface.Builder(context.assets, BUILT_IN_FONT).setFontVariationSettings("'wght' $weight").build()
+        }.getOrNull()
+    }
+
+    /** Golos Text in the weight of [default], null for monospace and serif, which it can't stand in for */
+    private fun builtInTypeface(default: Typeface): Typeface? {
+        if (default == Typeface.MONOSPACE || default == Typeface.SERIF) return null
+        if (!builtInLoaded) {
+            val context = Settings.getCurrentContext() ?: return null
+            synchronized(lock) {
+                if (!builtInLoaded) {
+                    cachedBuiltIn = loadBuiltIn(context, BUILT_IN_WEIGHT)
+                    cachedBuiltInBold = loadBuiltIn(context, BUILT_IN_BOLD_WEIGHT)
+                    builtInLoaded = true
+                }
+            }
+        }
+        return if (default.isBold) cachedBuiltInBold else cachedBuiltIn
+    }
 
     private fun loadCustomTypeface(context: Context): Typeface? {
         return runCatching {
@@ -75,7 +110,7 @@ object KeyboardTypeface {
         return if (emojiTypeface != null && text != null && isEmoji(text)) {
             emojiTypeface
         } else {
-            customTypeface() ?: defaultTypeface
+            customTypeface() ?: builtInTypeface(defaultTypeface) ?: defaultTypeface
         }
     }
 
@@ -97,6 +132,9 @@ object KeyboardTypeface {
             customTypefaceLoaded = false
             cachedEmojiTypeface = null
             emojiTypefaceLoaded = false
+            cachedBuiltIn = null
+            cachedBuiltInBold = null
+            builtInLoaded = false
         }
     }
 }

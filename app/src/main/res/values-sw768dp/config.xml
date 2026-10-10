@@ -28,11 +28,12 @@
 
     <fraction name="config_key_preview_text_ratio">50%</fraction>
     <fraction name="config_key_letter_ratio_holo">40%</fraction>
-    <fraction name="config_key_letter_ratio_lxx">50%</fraction>
+    <!-- PravkaBoard: smaller letters and labels, closer to the Gboard and Yandex keyboards -->
+    <fraction name="config_key_letter_ratio_lxx">38%</fraction>
     <fraction name="config_key_large_letter_ratio_holo">42%</fraction>
     <fraction name="config_key_large_letter_ratio_lxx">60%</fraction>
     <fraction name="config_key_label_ratio_holo">28%</fraction>
-    <fraction name="config_key_label_ratio_lxx">32%</fraction>
+    <fraction name="config_key_label_ratio_lxx">28%</fraction>
     <fraction name="config_key_hint_letter_ratio_holo">25%</fraction>
     <fraction name="config_key_hint_letter_ratio_lxx">25%</fraction>
     <fraction name="config_key_hint_label_ratio_holo">28%</fraction>

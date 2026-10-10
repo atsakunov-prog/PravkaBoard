@@ -44,10 +44,10 @@ object Defaults {
     }
 
     private const val DEFAULT_SIZE_SCALE = 1.0f // 100%
-    // PravkaBoard: rounded keys with borders in the Pravka look, dark day and night like the Pravka app
+    // PravkaBoard: rounded keys with borders, plain and neutral like the Gboard and Yandex keyboards
     const val PREF_THEME_STYLE = KeyboardTheme.STYLE_ROUNDED
     fun PREF_ICON_STYLE(prefs: SharedPreferences) = prefs.getString(Settings.PREF_THEME_STYLE, PREF_THEME_STYLE)!!
-    const val PREF_THEME_COLORS = KeyboardTheme.THEME_PRAVKA
+    const val PREF_THEME_COLORS = KeyboardTheme.THEME_PRAVKA_LIGHT
     const val PREF_THEME_COLORS_NIGHT = KeyboardTheme.THEME_PRAVKA
     const val PREF_THEME_KEY_BORDERS = true
     @JvmField
@@ -175,8 +175,9 @@ object Defaults {
     const val PREF_QUICK_PIN_TOOLBAR_KEYS = false
     val PREF_PINNED_TOOLBAR_KEYS = defaultPinnedToolbarPref
     val PREF_TOOLBAR_KEYS = defaultToolbarPref
-    const val PREF_AUTO_SHOW_TOOLBAR = false
-    const val PREF_AUTO_HIDE_TOOLBAR = false
+    // PravkaBoard: like Gboard and the Yandex keyboard, the toolbar shows until typing brings suggestions
+    const val PREF_AUTO_SHOW_TOOLBAR = true
+    const val PREF_AUTO_HIDE_TOOLBAR = true
     val PREF_CLIPBOARD_TOOLBAR_KEYS = defaultClipboardToolbarPref
     const val PREF_ABC_AFTER_EMOJI = false
     const val PREF_ABC_AFTER_CLIP = false

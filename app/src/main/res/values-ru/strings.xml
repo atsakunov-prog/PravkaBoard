@@ -235,6 +235,8 @@
     <string name="theme_name_brown" tools:keep="@string/theme_name_brown">Коричневый</string>
     <string name="theme_name_violette" tools:keep="@string/theme_name_violette">Фиалка</string>
     <string name="theme_name_pravka" tools:keep="@string/theme_name_pravka">Правка</string>
+    <string name="theme_name_pravka_light" tools:keep="@string/theme_name_pravka_light">Правка, светлая</string>
+    <string name="theme_name_pravka_glass" tools:keep="@string/theme_name_pravka_glass">Правка, стекло</string>
     <string name="theme_name_pravka_paper" tools:keep="@string/theme_name_pravka_paper">Правка, бумага</string>
     <string name="localized_number_row">Локализовать ряд с цифрами</string>
     <string name="show_popup_keys_all">Добавить все доступные варианты</string>

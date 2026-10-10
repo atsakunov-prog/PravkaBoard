@@ -19,7 +19,8 @@ import android.graphics.drawable.StateListDrawable
 import androidx.core.graphics.ColorUtils
 
 /**
- * PravkaBoard: key material of the Pravka app, the same convex key as its floating buttons
+ * PravkaBoard: how the keys of the rounded bordered style are drawn. FLAT is the plain key of the Gboard
+ * and Yandex keyboards. The others are the convex key of the Pravka app and its floating buttons
  * (ru.zf.pravka.trigger.BubbleSkin): light from above, a sheen at the top edge, shade at the bottom,
  * a thin rim that is light on top and dark below, and a side wall under the face. A pressed key goes
  * down onto its side wall and the light slides off it.
@@ -37,7 +38,12 @@ enum class KeyMaterial(
     val rimShade: Float,
     /** how much darker than the face the side wall is */
     val side: Float,
+    /** height of the side wall, 0 for a flat key */
+    val depthDp: Float = 1.5f,
+    val radiusDp: Float = 10f,
 ) {
+    /** plain key without light or depth, corners like the Yandex keyboard (about 12 % of the key height) */
+    FLAT(Color.WHITE, 0f, 0f, Color.BLACK, 0f, 0f, 0f, 0f, 7f),
     /** neutral warm glass of the Pravka "Today" screen, the light is cream and not white */
     GLASS(Color.rgb(255, 230, 200), 0.13f, 0.30f, Color.BLACK, 0.12f, 0.16f, 0.5f),
     /** glass of the Pravka mode, lit in its tint */
@@ -45,20 +51,22 @@ enum class KeyMaterial(
     /** CreamKey of the Pravka app: a bright sheen, a brown shade instead of a black one */
     CREAM(Color.WHITE, 0.75f, 0.60f, Color.rgb(120, 90, 50), 0.10f, 0.16f, 0.28f),
     /** the floating Pravka buttons themselves, for the action key */
-    KEY(Color.WHITE, 0.26f, 0.34f, Color.BLACK, 0.10f, 0.12f, 0.4f);
+    KEY(Color.WHITE, 0.26f, 0.34f, Color.BLACK, 0.10f, 0.12f, 0.4f, radiusDp = 16f);
 
     /** material of shift, delete and the other functional keys */
     val functional get() = if (this == GLASS) GLASS_INK else this
+    /** material of the action key */
+    val action get() = if (this == FLAT) FLAT else KEY
+    val lit get() = sheen > 0f || rimLight > 0f || foot > 0f || rimShade > 0f
 }
 
 class KeySkin(
     res: Resources,
-    radiusDp: Float,
     private val material: KeyMaterial,
 ) : Drawable() {
     private val density = res.displayMetrics.density
-    private val radius = radiusDp * density
-    private val depth = DEPTH_DP * density
+    private val radius = material.radiusDp * density
+    private val depth = material.depthDp * density
     private val rimWidth = RIM_DP * density
 
     private val facePaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -88,12 +96,16 @@ class KeySkin(
         canvas.translate(b.left.toFloat(), b.top.toFloat())
         if (pressed) {
             canvas.translate(0f, depth)
-        } else {
+        } else if (depth > 0f) {
             rect.set(0f, depth, w, faceHeight + depth)
             canvas.drawRoundRect(rect, radius, radius, sidePaint)
         }
         rect.set(0f, 0f, w, faceHeight)
         canvas.drawRoundRect(rect, radius, radius, facePaint)
+        if (!material.lit) {
+            canvas.restoreToCount(save)
+            return
+        }
         canvas.drawRoundRect(rect, radius, radius, foot)
         canvas.drawRoundRect(rect, radius, radius, sheen)
         val inset = rimWidth / 2f
@@ -173,21 +185,18 @@ class KeySkin(
     override fun getOpacity() = PixelFormat.TRANSLUCENT
 
     companion object {
-        private const val DEPTH_DP = 1.5f
         private const val SHEEN_SPAN = 0.34f
         private const val FOOT_SPAN = 0.2f
         private const val RIM_DP = 1.2f
         private const val PRESSED_LIGHT = 0.3f
-        const val KEY_RADIUS_DP = 10f
-        const val ACTION_KEY_RADIUS_DP = 16f
 
         /** Same states as btn_keyboard_key_rounded_base_border: action keys, keys without background
          *  that only show when pressed, and normal keys. Pressed is handled by the skin itself. */
         fun stateList(res: Resources, material: KeyMaterial): Drawable = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_active), KeySkin(res, ACTION_KEY_RADIUS_DP, KeyMaterial.KEY))
-            addState(intArrayOf(android.R.attr.state_empty, android.R.attr.state_pressed), KeySkin(res, KEY_RADIUS_DP, material))
+            addState(intArrayOf(android.R.attr.state_active), KeySkin(res, material.action))
+            addState(intArrayOf(android.R.attr.state_empty, android.R.attr.state_pressed), KeySkin(res, material))
             addState(intArrayOf(android.R.attr.state_empty), ColorDrawable(Color.TRANSPARENT))
-            addState(intArrayOf(), KeySkin(res, KEY_RADIUS_DP, material))
+            addState(intArrayOf(), KeySkin(res, material))
         }
     }
 }

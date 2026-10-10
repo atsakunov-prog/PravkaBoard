@@ -125,9 +125,12 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
     private val enabledToolKeyBackground = GradientDrawable()
     private var direction = 1 // 1 if LTR, -1 if RTL
 
+    // PravkaBoard: weight spreads a short row of keys over the whole width like in the Gboard toolbar,
+    // a long row still scrolls
     private val toolbarKeyLayoutParams = LinearLayout.LayoutParams(
         resources.getDimensionPixelSize(R.dimen.config_suggestions_strip_edge_key_width),
-        LinearLayout.LayoutParams.MATCH_PARENT
+        LinearLayout.LayoutParams.MATCH_PARENT,
+        1f
     )
 
     init {

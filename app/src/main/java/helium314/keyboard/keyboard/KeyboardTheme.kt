@@ -67,12 +67,16 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
         const val THEME_PINK = "pink"
         const val THEME_SAND = "sand"
         const val THEME_VIOLETTE = "violette"
-        // PravkaBoard: the look of the Pravka app, which is always dark, and a light paper variant of it
+        // PravkaBoard: plain neutral keys like the Gboard and Yandex keyboards, dark and light, and the convex
+        // keys of the Pravka app as glass (dark) and paper (light)
         const val THEME_PRAVKA = "pravka"
+        const val THEME_PRAVKA_LIGHT = "pravka_light"
+        const val THEME_PRAVKA_GLASS = "pravka_glass"
         const val THEME_PRAVKA_PAPER = "pravka_paper"
         private const val PRAVKA_LIGHT = 0.5f
         fun getAvailableDefaultColors(prefs: SharedPreferences, isNight: Boolean) = listOfNotNull(
-            THEME_PRAVKA, if (!isNight) THEME_PRAVKA_PAPER else null,
+            THEME_PRAVKA, if (!isNight) THEME_PRAVKA_LIGHT else null,
+            THEME_PRAVKA_GLASS, if (!isNight) THEME_PRAVKA_PAPER else null,
             if (!isNight) THEME_LIGHT else null, THEME_DARK,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) THEME_DYNAMIC else null,
             if (prefs.getString(Settings.PREF_THEME_STYLE, Defaults.PREF_THEME_STYLE) == STYLE_HOLO) THEME_HOLO_WHITE else null,
@@ -159,9 +163,45 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) DynamicColors(context, themeStyle, hasBorders, backgroundImage)
                     else getThemeColors(THEME_LIGHT, themeStyle, context, prefs, isNight)
                 }
+                // neutral graphite like the Yandex keyboard: keys one step above the background, functional keys
+                // another step, the action key one more; the Pravka orange only lights shift lock and the gesture trail
+                THEME_PRAVKA -> DefaultColors(
+                    themeStyle,
+                    hasBorders,
+                    accent = "#F5925A".toColorInt(),
+                    background = "#141416".toColorInt(),
+                    keyBackground = "#252528".toColorInt(),
+                    functionalKey = "#333438".toColorInt(),
+                    spaceBar = "#252528".toColorInt(),
+                    keyText = "#E6E6E8".toColorInt(),
+                    keyHintText = "#9A9AA0".toColorInt(),
+                    suggestionText = "#E6E6E8".toColorInt(),
+                    spaceBarText = "#8E8E93".toColorInt(),
+                    keyboardBackground = backgroundImage,
+                    actionKeyIcon = "#ECECEE".toColorInt(),
+                    keyMaterial = KeyMaterial.FLAT,
+                    actionKey = "#47484D".toColorInt(),
+                )
+                THEME_PRAVKA_LIGHT -> DefaultColors(
+                    themeStyle,
+                    hasBorders,
+                    accent = "#EA580C".toColorInt(),
+                    background = "#E4E5E9".toColorInt(),
+                    keyBackground = "#FFFFFF".toColorInt(),
+                    functionalKey = "#C9CBD1".toColorInt(),
+                    spaceBar = "#FFFFFF".toColorInt(),
+                    keyText = "#1C1C1E".toColorInt(),
+                    keyHintText = "#76767C".toColorInt(),
+                    suggestionText = "#1C1C1E".toColorInt(),
+                    spaceBarText = "#76767C".toColorInt(),
+                    keyboardBackground = backgroundImage,
+                    actionKeyIcon = "#1C1C1E".toColorInt(),
+                    keyMaterial = KeyMaterial.FLAT,
+                    actionKey = "#B8BBC2".toColorInt(),
+                )
                 // colors of Pravka 4.0 (docs/design/redesign-4/DESIGN.md in the Pravka repository): background, warm dark glass,
                 // Pravka ink on the functional keys, the orange of the floating "П" button on the action key
-                THEME_PRAVKA -> DefaultColors(
+                THEME_PRAVKA_GLASS -> DefaultColors(
                     themeStyle,
                     hasBorders,
                     accent = "#EA580C".toColorInt(),

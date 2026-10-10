@@ -604,6 +604,7 @@ final class SuggestionStripLayoutHelper {
     }
 
     private static Typeface getTextTypeface(@Nullable final CharSequence text) {
-        return hasStyleSpan(text, BOLD_SPAN) ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT;
+        // the typeface the word is drawn in, else widths are measured for another font
+        return KeyboardTypeface.resolve(text, hasStyleSpan(text, BOLD_SPAN) ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
     }
 }
