@@ -306,10 +306,13 @@ fun createAppearanceSettings(context: Context) = listOf(
         CustomFontPreference(it, Settings.getCustomFontFile(LocalContext.current), R.string.custom_font)
     },
     Setting(context, Settings.PREF_FONT_SCALE, R.string.prefs_font_scale) { setting ->
-        SliderPreference(
+        // values of the former single setting are the default for each variant
+        val default = LocalContext.current.prefs().getFloat(setting.key, Defaults.PREF_FONT_SCALE)
+        KeyboardScalePreference(
             name = setting.title,
-            key = setting.key,
-            default = Defaults.PREF_FONT_SCALE,
+            baseKey = setting.key,
+            dimensions = listOf(stringResource(R.string.landscape), stringResource(R.string.folded)),
+            defaults = Array(4) { default },
             range = 0.5f..1.5f,
             description = { "${(100 * it).toInt()}%" }
         ) { KeyboardSwitcher.getInstance().setThemeNeedsReload() }

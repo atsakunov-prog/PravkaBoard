@@ -3,6 +3,7 @@ package helium314.keyboard.latin.utils
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.database.ContentObserver
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -23,17 +24,40 @@ object FoldableUtils {
     var isFoldable = false
         private set
 
-    var isFolded = false
-        private set(value) {
+    /**
+     * Whether the narrow outer screen of a foldable is used. This is derived from the screen size,
+     * which changes together with the configuration, so keyboard size settings for the folded state
+     * are applied right away. Display features and hinge sensor are only a fallback, as they may
+     * report the change only after the keyboard was laid out for the new screen.
+     */
+    val isFolded: Boolean get() {
+        if (!isFoldable) return false
+        return appContext?.resources?.configuration?.let { isFolded(it) } ?: observedFolded
+    }
+
+    /** Folded state for the screen described by [configuration]. */
+    fun isFolded(configuration: Configuration): Boolean {
+        if (!isFoldable) return false
+        val smallestWidth = configuration.smallestScreenWidthDp
+        if (smallestWidth == Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED) return observedFolded
+        return smallestWidth < UNFOLDED_MIN_SMALLEST_WIDTH_DP
+    }
+
+    // inner screens of book-style foldables are at least this wide (like tablets), outer screens are phone sized
+    private const val UNFOLDED_MIN_SMALLEST_WIDTH_DP = 600
+
+    private var appContext: Context? = null
+
+    private var observedFolded = false
+        set(value) {
             if (field == value) return
-            // we could reload the keyboard at this point, but according to a user this is not necessary
-            // https://github.com/HeliBorg/HeliBoard/issues/1063#issuecomment-4178571414
-            Log.v(TAG, "set isFolded to $value")
+            Log.v(TAG, "set observed folded state to $value")
             field = value
         }
 
     /** set [isFoldable] */
     fun init(context: Context) {
+        appContext = context.applicationContext
         isFoldable = getFeatureString(context) != null || hasFoldSensor(context)
         Log.i(TAG, if (isFoldable) "foldable" else "not foldable")
     }
@@ -95,7 +119,7 @@ object FoldableUtils {
         return false
     }
 
-    /** Observes changes to [DISPLAY_FEATURES] or hinge angle, and updates [isFolded] on changes */
+    /** Observes changes to [DISPLAY_FEATURES] or hinge angle, used when the screen size is not known */
     class FoldableObserver(context: Context) {
         var sensorForDebug = false
 
@@ -109,7 +133,7 @@ object FoldableUtils {
                 }
                 if (DebugFlags.DEBUG_ENABLED)
                     Log.v(TAG, "$DISPLAY_FEATURES changed: $featuresString")
-                isFolded = extractFoldedState(featuresString)
+                observedFolded = extractFoldedState(featuresString)
             }
         }
 
@@ -122,7 +146,7 @@ object FoldableUtils {
                 // * 160° is the change between half-open and flat
                 // maybe we should use the sensor range? wait for bug reports + logs
                 if (!sensorForDebug)
-                    isFolded = (angle ?: 180f) < 40
+                    observedFolded = (angle ?: 180f) < 40
                 if (DebugFlags.DEBUG_ENABLED)
                     Log.v(TAG, "sensor changed: ${event.values?.toList()}")
             }
@@ -133,8 +157,8 @@ object FoldableUtils {
             val featureString = getFeatureString(context)
             if (featureString != null) {
                 context.contentResolver.registerContentObserver(displayFeaturesUri, false, featureStringObserver)
-                isFolded = extractFoldedState(featureString)
-                Log.v(TAG, "using $DISPLAY_FEATURES, folded: $isFolded")
+                observedFolded = extractFoldedState(featureString)
+                Log.v(TAG, "using $DISPLAY_FEATURES, folded: $observedFolded")
             }
             if (hasFoldSensor(context) && (featureString == null || DebugFlags.DEBUG_ENABLED)) {
                 sensorForDebug = featureString != null

@@ -481,6 +481,13 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
         return prefs.getFloat(SettingsKt.createPrefKeyForBooleanSettings(PREF_BOTTOM_ROW_SCALE_PREFIX, index, 2), defaultValue);
     }
 
+    /** The font scale used to be a single setting, its value is the default for each variant. */
+    public static float readFontScale(SharedPreferences prefs, boolean landscape, boolean folded) {
+        final int index = SettingsKt.findIndexOfDefaultSetting(landscape, folded);
+        final float defaultValue = prefs.getFloat(PREF_FONT_SCALE, Defaults.PREF_FONT_SCALE);
+        return prefs.getFloat(SettingsKt.createPrefKeyForBooleanSettings(PREF_FONT_SCALE, index, 2), defaultValue);
+    }
+
     public static float readKeyGapScale(SharedPreferences prefs, boolean landscape, boolean folded) {
         int index = SettingsKt.findIndexOfDefaultSetting(landscape, folded);
         float defaultValue = Defaults.PREF_KEY_GAP_SCALE[index];

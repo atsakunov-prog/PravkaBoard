@@ -91,6 +91,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
     private int mCurrentUiMode;
     private int mCurrentOrientation;
     private int mCurrentDpi;
+    private boolean mCurrentFolded;
     private boolean mThemeNeedsReload;
 
     @SuppressLint("StaticFieldLeak") // this is a keyboard, we want to keep it alive in background
@@ -136,6 +137,8 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
                 || !keyboardTheme.equals(mKeyboardTheme)
                 || mCurrentDpi != res.getDisplayMetrics().densityDpi
                 || mCurrentOrientation != res.getConfiguration().orientation
+                // folding may keep orientation and density, but keyboard size settings differ
+                || mCurrentFolded != FoldableUtils.INSTANCE.isFolded(res.getConfiguration())
                 || (mCurrentUiMode & Configuration.UI_MODE_NIGHT_MASK) != (res.getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
                 || !mThemeContext.getResources().equals(res)
                 || Settings.getValues().mColors.haveColorsChanged(context)) {
@@ -145,6 +148,7 @@ public final class KeyboardSwitcher implements KeyboardState.SwitchActions {
             mCurrentUiMode = res.getConfiguration().uiMode;
             mCurrentOrientation = res.getConfiguration().orientation;
             mCurrentDpi = res.getDisplayMetrics().densityDpi;
+            mCurrentFolded = FoldableUtils.INSTANCE.isFolded(res.getConfiguration());
             KeyboardLayoutSet.Companion.onKeyboardThemeChanged();
             return true;
         }
