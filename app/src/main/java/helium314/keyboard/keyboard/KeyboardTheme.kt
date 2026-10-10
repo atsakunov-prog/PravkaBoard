@@ -65,7 +65,11 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
         const val THEME_PINK = "pink"
         const val THEME_SAND = "sand"
         const val THEME_VIOLETTE = "violette"
+        // PravkaBoard: the palette of the Pravka app, warm paper and orange
+        const val THEME_PRAVKA = "pravka"
+        const val THEME_PRAVKA_NIGHT = "pravka_night"
         fun getAvailableDefaultColors(prefs: SharedPreferences, isNight: Boolean) = listOfNotNull(
+            if (!isNight) THEME_PRAVKA else null, THEME_PRAVKA_NIGHT,
             if (!isNight) THEME_LIGHT else null, THEME_DARK,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) THEME_DYNAMIC else null,
             if (prefs.getString(Settings.PREF_THEME_STYLE, Defaults.PREF_THEME_STYLE) == STYLE_HOLO) THEME_HOLO_WHITE else null,
@@ -152,6 +156,35 @@ private constructor(val themeId: Int, @JvmField val mStyleId: Int) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) DynamicColors(context, themeStyle, hasBorders, backgroundImage)
                     else getThemeColors(THEME_LIGHT, themeStyle, context, prefs, isNight)
                 }
+                THEME_PRAVKA -> DefaultColors(
+                    themeStyle,
+                    hasBorders,
+                    accent = "#EA580C".toColorInt(),
+                    background = "#ECE5D6".toColorInt(),
+                    keyBackground = "#FEFCF6".toColorInt(),
+                    functionalKey = "#DCD3C1".toColorInt(),
+                    spaceBar = "#FEFCF6".toColorInt(),
+                    keyText = "#241F19".toColorInt(),
+                    keyHintText = "#8A8172".toColorInt(),
+                    suggestionText = "#241F19".toColorInt(),
+                    spaceBarText = "#9A9183".toColorInt(),
+                    keyboardBackground = backgroundImage,
+                )
+                THEME_PRAVKA_NIGHT -> DefaultColors(
+                    themeStyle,
+                    hasBorders,
+                    accent = "#FB923C".toColorInt(),
+                    background = "#16130F".toColorInt(),
+                    keyBackground = "#332D25".toColorInt(),
+                    functionalKey = "#25211B".toColorInt(),
+                    spaceBar = "#332D25".toColorInt(),
+                    keyText = "#ECE5D8".toColorInt(),
+                    keyHintText = "#8F8574".toColorInt(),
+                    suggestionText = "#ECE5D8".toColorInt(),
+                    spaceBarText = "#8F8574".toColorInt(),
+                    keyboardBackground = backgroundImage,
+                    actionKeyIcon = "#381603".toColorInt(),
+                )
                 THEME_LIGHT -> DefaultColors(
                     themeStyle,
                     hasBorders,

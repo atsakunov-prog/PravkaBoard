@@ -234,6 +234,8 @@
     <string name="add_new_dictionary_title">Добавить словарь из файла</string>
     <string name="theme_name_brown" tools:keep="@string/theme_name_brown">Коричневый</string>
     <string name="theme_name_violette" tools:keep="@string/theme_name_violette">Фиалка</string>
+    <string name="theme_name_pravka" tools:keep="@string/theme_name_pravka">Правка</string>
+    <string name="theme_name_pravka_night" tools:keep="@string/theme_name_pravka_night">Правка, ночь</string>
     <string name="localized_number_row">Локализовать ряд с цифрами</string>
     <string name="show_popup_keys_all">Добавить все доступные варианты</string>
     <string name="more_autocorrect">Больше автоисправлений</string>
